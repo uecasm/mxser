@@ -1,0 +1,69 @@
+Support install into $DESTDIR.
+--- a/utility/conf/Makefile
++++ b/utility/conf/Makefile
+@@ -5,7 +5,7 @@
+ all: muestty
+ 
+ install: muestty
+-	@cp -f muestty /usr/bin
++	@install muestty $(DESTDIR)/usr/bin/
+ 
+ muestty: $(FILES)
+ 	@cc $(FILES) -o muestty
+@@ -18,4 +18,4 @@
+ 	@rm -f muestty
+ 
+ uninstall:
+-	@rm -f /usr/bin/muestty
++	@rm -f $(DESTDIR)/usr/bin/muestty
+--- a/utility/diag/Makefile
++++ b/utility/diag/Makefile
+@@ -4,7 +4,7 @@
+ all:		msdiag
+ 
+ install: msdiag
+-	@cp -p msdiag /usr/bin
++	@install msdiag $(DESTDIR)/usr/bin/
+ 
+ msdiag: 	$(FILES)
+ 	@cc $(FILES) -o msdiag
+@@ -20,4 +20,4 @@
+ 	@rm -f msdiag
+ 
+ uninstall:
+-	@rm -f /usr/bin/msdiag
++	@rm -f $(DESTDIR)/usr/bin/msdiag
+--- a/utility/mon/Makefile
++++ b/utility/mon/Makefile
+@@ -12,7 +12,7 @@
+ all:		msmon
+ 
+ install: msmon
+-	@cp -p msmon /usr/bin
++	@install msmon $(DESTDIR)/usr/bin/
+ 
+ msmon: 	$(FILES)
+ 	@cc $(FILES) -o msmon
+@@ -33,4 +33,4 @@
+ 	@rm -f msmon
+ 
+ uninstall:
+-	@rm -f /usr/bin/msmon
++	@rm -f $(DESTDIR)/usr/bin/msmon
+--- a/utility/term/Makefile
++++ b/utility/term/Makefile
+@@ -12,7 +12,7 @@
+ all:		msterm
+ 
+ install: msterm
+-	@cp -p msterm /usr/bin
++	@install msterm $(DESTDIR)/usr/bin/
+ 
+ msterm:	$(FILES)
+ 	@cc $(FILES) -o msterm
+@@ -44,4 +44,4 @@
+ 	@rm -f msterm
+ 
+ uninstall:
+-	@rm -f /usr/bin/msterm
++	@rm -f $(DESTDIR)/usr/bin/msterm

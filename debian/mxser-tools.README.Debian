@@ -1,0 +1,11 @@
+mxser/mxupcie for Debian
+
+The configuration and test utilities are provided as compiled binaries, as
+usual.  Of these, probably the most useful is the muestty utility.  Man
+pages haven't been provided for them, but they do include some help.
+
+The vendor-supplied documentation is included in the mxser-dkms package,
+and not reproduced here.  With that package installed, look in
+/usr/share/doc/mxser-dkms/ for more information.
+
+ -- Gavin Lambert <uecasm@users.noreply.github.com>  Tue, 04 Apr 2017 17:30:12 +1200

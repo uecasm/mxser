@@ -1,0 +1,15 @@
+Add Makefile for dkms package.
+--- /dev/null
++++ b/dkms/Makefile
+@@ -0,0 +1,11 @@
++KERNELRELEASE:=$(shell uname -r)
++KDIR:=/lib/modules/${KERNELRELEASE}/build
++
++MakeMod = -C ${KDIR} M=${CURDIR}/driver
++
++all:
++	${MAKE} LVER=${KERNELRELEASE} ${MakeMod} modules
++
++clean:
++	${MAKE} LVER=${KERNELRELEASE} ${MakeMod} clean
++	${MAKE} LVER=${KERNELRELEASE} -C driver clean_local

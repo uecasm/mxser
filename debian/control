@@ -1,0 +1,33 @@
+# In non-free because upstream (and hence mxser-tools) contains prebuilt
+# libraries without source (which also causes the limited Architecture).
+# Though theoretically everything is GPL...
+
+Source: mxser
+Section: non-free/kernel
+Priority: extra
+Maintainer: Gavin Lambert <debian@mirality.co.nz>
+Build-Depends: debhelper (>=9), dkms, linux-libc-dev, linux-kbuild-4.9
+Standards-Version: 3.9.8
+Homepage: http://www.moxa.com/support/download.aspx?type=support&id=1122
+
+Package: mxser-dkms
+Architecture: linux-any
+Multi-Arch: foreign
+Depends: ${misc:Depends}, linux-kbuild-4.9
+Recommends: mxser-tools
+Description: DKMS files to build and install mxser and mxupcie
+ Drivers for MOXA serial port adapters.
+ .
+ This package contains the DKMS files to build and install mxser and mxupcie.
+ .
+ To install this package, you have to install the header files for your current
+ kernel manually (usually included in the "linux-headers-<your architecture>").
+
+Package: mxser-tools
+Architecture: i386 amd64
+Depends: ${misc:Depends}
+Recommends: mxser-dkms
+Description: Tools to configure or test mxser/mxupcie serial adapters.
+ Drivers for MOXA serial port adapters.
+ .
+ This package contains utilities needed to configure and test the adapters.

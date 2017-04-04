@@ -1,0 +1,13 @@
+mxser/mxupcie for Debian
+
+The kernel modules for the MOXA Smartio/Industio family of serial adapters
+are provided as a dkms source package.  Installing it should automatically
+build and install the drivers into your current kernel, and optionally all
+others installed on your system.  (See the DKMS manpages for more info.)
+
+The readme.txt.gz and VERSION.txt.gz files are compressed copies of the
+vendor-supplied documentation, which have some more details about the
+driver and changelog.  The build instructions in those files don't apply
+to this packaged version, of course.
+
+ -- Gavin Lambert <uecasm@users.noreply.github.com>  Tue, 04 Apr 2017 17:30:12 +1200

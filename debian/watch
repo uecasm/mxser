@@ -1,0 +1,6 @@
+version=4
+opts="pagemangle=s%<input .*hid_url.* value=(.[^"]*.) />%<a href=$1>link</a>%, \
+    uversionmangle=s%_build_%\+%" \
+    http://www.moxa.com/support/download.aspx?type=support&id=1122 \
+    .*driv_linux_smart_v([\d\.]+_build_\d+)\.tgz \
+    debian uupdate

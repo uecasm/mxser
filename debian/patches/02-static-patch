@@ -1,0 +1,45 @@
+Ensure tools are linked statically.
+--- a/utility/conf/Makefile
++++ b/utility/conf/Makefile
+@@ -8,7 +8,7 @@
+ 	@install muestty $(DESTDIR)/usr/bin/
+ 
+ muestty: $(FILES)
+-	@cc $(FILES) -o muestty
++	@cc -static $(FILES) -o muestty
+ 
+ conftool.o: 	conftool.c 
+ 	@$(CC)	conftool.c $(HDR_DIR)
+--- a/utility/diag/Makefile
++++ b/utility/diag/Makefile
+@@ -7,7 +7,7 @@
+ 	@install msdiag $(DESTDIR)/usr/bin/
+ 
+ msdiag: 	$(FILES)
+-	@cc $(FILES) -o msdiag
++	@cc -static $(FILES) -o msdiag
+ 
+ diag.o: 	diag.c ../global.h
+ 	@$(CC)	diag.c
+--- a/utility/mon/Makefile
++++ b/utility/mon/Makefile
+@@ -15,7 +15,7 @@
+ 	@install msmon $(DESTDIR)/usr/bin/
+ 
+ msmon: 	$(FILES)
+-	@cc $(FILES) -o msmon
++	@cc -static $(FILES) -o msmon
+ 
+ 
+ mon_p.o: 	mon_p.c ../global.h
+--- a/utility/term/Makefile
++++ b/utility/term/Makefile
+@@ -15,7 +15,7 @@
+ 	@install msterm $(DESTDIR)/usr/bin/
+ 
+ msterm:	$(FILES)
+-	@cc $(FILES) -o msterm
++	@cc -static $(FILES) -o msterm
+ 
+ term.o: 	term.c term.h
+ 	@$(CC)	term.c
