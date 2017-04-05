@@ -1,0 +1,64 @@
+#!/bin/sh
+###############################################################################
+# Program:
+# 		MOXA Linux Environment Parameter Checker
+#	
+# History:
+# 2009/04/21
+#
+# Author:
+# Eric Lo, eric.lo@moxa.com
+#
+# Discription:
+# The script is to check some environment parameters before installing
+# MOXA Linux driver.
+# Make sure that the parameters are all set to install driver.
+#
+###############################################################################
+
+#Parameters
+MX_MSB_VERSION=1.16
+MX_RELEASE=3.11.0
+MX_VERSION=3
+MX_PATCH_LEVEL=11
+MX_SUBLEVEL=0
+MX_RELEASE_DATE=2014/03/03
+MX_VERSION_CODE=$(( ($MX_VERSION<<16)+($MX_PATCH_LEVEL<<8)+$MX_SUBLEVEL ))
+
+K_MODULE_VERSION=$(uname -r)
+K_RELEASE=$(echo $K_MODULE_VERSION | sed -e "s/-.*//g")
+K_VERSION=$(echo $K_RELEASE | cut -d '.' -f 1)
+K_PATCH_LEVEL=$(echo $K_RELEASE | cut -d '.' -f 2)
+K_SUBLEVEL=$(echo $K_RELEASE | cut -d '.' -f 3)
+K_VERSION_CODE=$(( ($K_VERSION<<16)+($K_PATCH_LEVEL<<8)+$K_SUBLEVEL ))
+
+K_SOURCE=/lib/modules/$K_MODULE_VERSION/build
+LINUX_DIS=$(grep '[0-9]' /etc/issue )
+
+#Information
+echo "**********************************************************************"
+echo " $LINUX_DIS $K_MODULE_VERSION"
+echo " MOXA Smartio/Industio Family Multiport Board Device Driver ver $MX_MSB_VERSION"
+echo " Release Date: $MX_RELEASE_DATE"
+echo "**********************************************************************"
+
+#Check kernel source
+if test  ! -e $K_SOURCE
+then
+echo "*********************************ERROR********************************"
+echo " Unable to locate matching source for kernel $K_MODULE_VERSION."
+echo " Please install proper kernel-header/source or contact support@moxa.com."
+echo "**********************************************************************"
+exit 1
+fi
+
+#Check supported kernel version
+if test $K_VERSION_CODE -gt $MX_VERSION_CODE
+then
+echo "********************************WARNING**********************************"
+echo " MOXA Smartio/Industio Family driver may not be compatible with"
+echo " Linux Kernel versions newer than $MX_RELEASE ."
+echo " To download the latest driver, please visit Moxa at: http://www.moxa.com"
+echo " If you have questions, please contact Moxa support at: support@moxa.com"
+echo "*************************************************************************"
+fi

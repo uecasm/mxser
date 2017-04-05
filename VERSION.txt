@@ -1,0 +1,169 @@
+Version number:     Ver1.16
+Product Line:       Moxa Smartio/Industio/UPCI/PCIe/"PC/104-Plus" Family
+Platform:           x86, x64, Linux kernel 2.4.x, 2.6.x, 3.x & above
+Company:            Moxa Inc.
+Date:               03/03/2014
+
+Supported Product:
+====================
+CP-102U, CP-102UL, CP-102UF
+CP-132U-I, CP-132UL,
+CP-132, CP-132I, CP132S, CP-132IS, 
+CI-132, CI-132I, CI-132IS, 
+(C102H, C102HI, C102HIS, C102P, CP-102, CP-102S)
+
+CP-104EL, CP-104UL, CP-104JU,
+CP-134U, CP-134U-I
+C104H/PCI, C104HS/PCI, 
+CP-114, CP-114I, CP-114S, CP-114IS, CP-114UL
+C104H, C104HS, 
+CI-104J, CI-104JS
+CI-134, CI-134I, CI-134IS, 
+(C114HI, CT-114I, C104P)
+
+CP-118EL, CP-118U, CP-118U-I,
+CP-138U, CP-138U-I
+CP-168EL, CP-168U,
+C168H/PCI,  
+C168H, C168HS, 
+(C168P)
+
+CB-108, CB-114, CB-134I
+
+POS-104UL
+
+CP-102E, CP-102EL, CP-132EL, CP-132EL-I, CP-114EL, CP-114EL-I
+
+CP-112UL, CP-112UL-I, CP-114UL-I
+
+CP-104EL-A, CP-168EL-A, CP-118EL-A, CP-118E-I-A
+
+CP-134EL-A-I, CP-118E-A-I, CP-138E-A-I, CP-116E-A
+
+Release Note:
+=============
+ver1.16 Build 14030317 (03/03/2014)
+1. New: Support new models CP-134EL-A-I, CP-118E-A-I, CP-138E-A-I, CP-116E-A.
+2. New: Enable Smart RS-485 function of new supported models.
+3. New: Support kernel version up to 3.11.0
+4. New: Support distribution Fedora 16 (Kernel 3.1.1)
+5. New: Support linear baud for MUE250/MUE450/MUE850.
+6. Improve: The PCI-E modules now support disable FIFO feature	 
+7. Bugfix: Compile error in Debian7
+8. Bugfix: The data transmission not stop after port close with low baudrate.
+9. Bugfix: The serial settings not set when serial port open.
+10. Bugfix: Fix the size problem of ioctl 'TIOCSERGETLSR' in 64-bit kernel 
+11. Bugfix: Fix the prototype of IOCTL operation declare improperly on
+    linux kernel 3.x
+12. Bugfix: Fix system crash when application calls ioctl() with TIOCMIWAIT.
+
+Ver1.15
+1. Add CP-104EL-A, CP-168EL-A, CP-118EL-A, CP-118E-I-A.
+2. Support kernel up to 2.6.30.
+3. Fix msdiag utility in x64 system.
+
+Ver1.14
+1. Support kernel up to 2.4.37.
+2. Add CP-112UL, CP-112UL-I, CP-114UL-I.
+3. Fix a problem of msmknod which can't execute in CSH.
+4. Support kernel up to 2.6.28.
+5. Support kernel up to 2.6.27.
+6. Support kernel up to 2.6.26.
+7. Modify some content of build.log and add Moxa email support@moxa.com. 
+
+Ver1.13
+1. Add CP-102E, CP-102EL, CP-132E, CP-132EL-I, CP-114EL, CP-114EL-I.
+
+Ver1.12
+1. Add CP-102UF model.
+2. Support kernel up to 2.6.21.
+3. Support to set baud rate by setserial.
+
+Ver1.11
+1. Add CP-114UL model. 
+
+Ver1.10
+1. Add seven models.
+   CB-108, CB-114, CB-134I, CP-118U-I, CP-138U, CP-138U-I, POS-104UL
+2. Support kernel up to 2.6.20.
+3. Support Fedora Core 6.
+4. Fix the problem that the driver can't install into the kernel.
+5. Fix the "backspace" and "delete" keys of msterm.
+6. Fix the problem that the system hangs up while opening the moxa
+   card with minicom.
+7. Fix the error that the echo function failed to send string.
+8. Support kernel up to 2.6.18, including Fedora Core 5.
+9. Fix the error installation of port numbers.
+	In previous version of driver, if the card is not 8 ports product, the driver will assign it as 4 ports product.
+	Therefore, the driver recognized incorrect port numbers in all 2 ports ISA products.
+	The bug is at the mxser_get_ISA_conf() function.
+10. Support non-standard baud rate.
+11. Programming guide for special baud rate:
+	
+   - Define the I/O control code.
+    
+	 #define  MOXA_SET_SPECIAL_BAUD_RATE  0x44D 	
+	
+   - Using the ioctl() API to set non-standard baud rate after 
+     setting the termios parameters.
+	  
+	 int  baud; 
+	 baud = 500000;  /* set the non-standard baud rate */
+	 ...
+	 tcsetattr(fd,TCSANOW,&t);
+
+	 ioctl(fd, MOXA_SET_SPECIAL_BAUD_RATE, &baud); 
+12. Support kernel up to 2.6.17rc1, including Fedora Core 5.
+
+Ver1.9
+1. Support x64 Linux edition.
+2. Support CP-118EL, CP-168EL, CP-104EL PCI Express board
+3. Fix data lost problem which caused by race condition.
+4. Use access_ok() to replace verify_area() begin kernel 2.6.
+5. Fixed depmod failed problem under RHEL AS 3.
+6. Remove 1.8.10 debug messages.
+7. Add debug info (You can see it in /var/log/messages).   
+8. TCSADRAIN TCSAFLUSH will flush the output queued data. Fixed.
+9. Modify mxser_write to Support 2.6.10 or above.
+10. Under 2.6.10, the ttyMx need to be created at each boot. You 
+   can see rc.mxser for reference.
+11. Redefine some function prototype without defining "inline".
+   - mxser_receive_chars()
+   - mxser_transmit_chars()
+   - mxser_check_modem_status()
+12. Fix system halt problem under SuSE 9.1 +2.6.5-7.108smp.
+
+Ver1.8
+1. Offical Release.
+2. In this version, use "modprobe mxser" to load driver instead.
+3. Speed up msmon load time.
+4. Fix system halt problem while traffic is heavy (for ver1.7.7).
+5. Fix low performance problem on PCI board (for ver1.7.7). 
+6. Linux 2.0.x & 2.2.x doesn't support any more from this version.
+7. cum* device is obsolete under Linux kernel 2.6 (but still also
+   availabe under Linux kernel 2.4). Use ttyM* device instead.
+8. Support MOXA powered UART MU860. This can enhance CP-168U/CP-104U/
+   CP-104JU v2 performance & function (on-chip SW flow control,
+   up to 921.6k baud rate, 128 bytes FIFO).
+9. Newly support CP-118U, CP-102U, CP-102UL.  
+10. Support Linux 2.6.x.
+    a. For RedHat AS/ES/WS/Fedora Core 1 (not for Core 2):
+	 # make installsp1 
+    b. Use "insmod ./mxser.ko" under mxser\driver, not "insmod mxser".
+11. Fixed the Tx/Rx problem when using ISA Boards.
+12. Fix compiling problem under Red Hat AS/ES/WS/Fedora Core 1.
+    To fix this problem, the compiling option must be changed from "install" 
+    to "installsp1". 
+
+   - original -
+	# cd <installed> directory
+	# make install 
+	# ...
+
+   - new -
+	# cd <installed> directory
+	# make installsp1 
+	# ...
+
+
+-End-

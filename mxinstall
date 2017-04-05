@@ -1,0 +1,54 @@
+#!/bin/sh
+###############################################################################
+# Program:
+# 		MOXA Linux driver installer
+#	
+# History:
+# 2009/05/21
+#
+# Author:
+# Eric Lo, eric.lo@moxa.com
+#
+# Discription:
+# The script install and load the MOXA Linux driver.
+#
+###############################################################################
+
+TARGET_DRIVER1=mxser
+TARGET_DRIVER2=mxupcie
+MXVER=1.16
+MAJOR_PCI=30
+MAJOR_PCIE=31
+MINOR=32
+
+if lsmod | grep -q $TARGET_DRIVER1 ; then
+	echo "Found $TARGET_DRIVER1 in system..."
+	echo "Unloading $TARGET_DRIVER1..."
+	rmmod $TARGET_DRIVER1
+	echo "Unload $TARGET_DRIVER1 successfully."
+	echo ""
+fi
+
+if lsmod | grep -q $TARGET_DRIVER2 ; then
+	echo "Found $TARGET_DRIVER2 in system..."
+	echo "Unloading $TARGET_DRIVER2..."
+	rmmod $TARGET_DRIVER2
+	echo "Unload $TARGET_DRIVER2 successfully."
+	echo ""
+fi
+
+if make install ; then
+	echo ""
+	echo "Loading driver..."
+	modprobe $TARGET_DRIVER1
+	modprobe $TARGET_DRIVER2
+	[ -f /dev/mxser ] || rm -rf /dev/mxser
+	mknod /dev/mxser c $MAJOR_PCI $MINOR
+	chmod a+wx /dev/mxser
+	[ -f /dev/mxupcie ] || rm -rf /dev/mxupcie
+	mknod /dev/mxupcie c $MAJOR_PCIE $MINOR
+	chmod a+wx /dev/mxupcie	
+	echo "**********************************************************************"
+	echo " MOXA Smartio/Industio Family driver ver $MXVER loaded successfully."
+	echo "**********************************************************************"
+fi

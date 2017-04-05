@@ -1,0 +1,84 @@
+#!/bin/sh
+#
+
+REL=`uname -r`
+DIRS=/lib/modules/$REL/kernel/drivers/char 
+uname -a | grep 2.6 > /dev/null
+RETV=$?
+if [ $RETV -eq 0 ]; then
+	MX_MOD1=mxser.ko
+	MX_MOD2=mxupcie.ko
+else
+	MX_MOD1=mxser.o
+	MX_MOD2=mxupcie.o
+fi
+
+if grep mxser /proc/modules > /dev/null ; then
+	MX_LOADED1=Y
+fi
+
+if grep mxupcie /proc/modules > /dev/null ; then
+	MX_LOADED2=Y
+fi
+
+if [ "$MX_LOADED1" == "Y" ] && [ "$MX_LOADED2" == "Y" ] ; then
+	echo "The MOXA Smartio/Industio/UPCI/PCIe driver is already loaded!"
+	exit 0
+fi
+
+for i in $DIRS
+do
+	if [ -f $i/$MX_MOD1 ] ; then
+		MXSER=$i/$MX_MOD1
+	elif [ -f $i/$MX_MOD2 ] ; then
+		MXUPCIE=$i/$MX_MOD2
+	fi
+done
+
+if test -z "$MXSER"  && test -z "$MXUPCIE" ; then
+	echo "Couldn't find the MOXA Smartio/Industio/UPCI/PCIe Family driver loadable kernel module!"
+	exit 1
+fi
+
+# When using ISA board, please add parameter to insmod:
+#   insmod -f mxser ioaddr=x,x,x,x
+#
+# ex : I/O address=0x180 & 0x280
+# if modprobe mxser ioaddr=0x180,0x280 ; then :; else
+# 	exit $?
+# fi
+#
+# You can add other parameters as well
+#
+# ex : interface=0x01
+# if modprobe mxupcie interface=0x01 ; then :; else
+#	exir $?
+# fi
+#
+
+if modprobe mxser ; then
+	MX_LOADED1=Y	
+fi
+
+if modprobe mxupcie; then
+	MX_LOADED2=Y	
+fi
+
+if [ "$MX_LOADED1" != "Y" ] && [ "$MX_LOADED2" != "Y" ] ; then
+	exit $?
+fi
+
+echo " "
+echo "MOXA Smartio/Industio/UPCI/PCIe Family driver loaded"
+
+# for 2.6.10 or above, you need following line to re-create ttyMx.
+# Replace the "/mxser/driver" to your real driver path:
+#
+# /mxser/driver/msmknod 30 35 4
+#
+# According to the results of auto tuning, uncommand the following tow
+# instructions to set the proper terminator and pull high/low resistors
+#
+# muestty -t xxx /dev/ttyMUE0
+# muestty -p xxx /dev/ttyMUE0
+#

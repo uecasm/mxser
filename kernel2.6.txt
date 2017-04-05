@@ -1,0 +1,33 @@
+
+The Smartio/Industio/UPCI/PCIe Linux driver supports Linux Kernel 2.6 
+===============================================================
+2-10-'06
+
+1. The first Moxa driver which support 
+   Kernel 2.6 is Ver1.8. Ver1.9 begins to
+   support x64.
+
+2. The difference under 2.6 and 2.4:
+   a. The cum* device is obsolete. That is,
+      you can't use cum* device under kernel
+      2.6. 
+
+   b. In some distribution, the tty port will
+      be disappeared at next boot. You can
+      run msmknod (in driver path) again to solve 
+      this problem. That is, you can put the 
+      msmknod into boot script. Please refer the
+      rc.mxser for more information. Moxa will
+      fix this problem in next release.
+
+3. How to load driver:
+	Old method:
+	# insmod mxser
+
+	From ver1.8 on 2.4 and 2.6: 
+	# modprobe mxser
+
+4. If any compatible issue, please contact
+   support@moxa.com
+
+-End-
