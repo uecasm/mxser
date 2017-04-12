@@ -1,6 +1,14 @@
-IRQF_DISABLED has been removed as of kernel 4.1
-Index: b/driver/mxpcie.h
-===================================================================
+From: Gavin Lambert <uecasm@users.noreply.github.com>
+Date: Wed, 12 Apr 2017 15:53:31 +1200
+Subject: IRQF_DISABLED has been removed as of kernel 4.1
+
+---
+ driver/mxpcie.h | 4 +++-
+ driver/mxser.c  | 4 +++-
+ 2 files changed, 6 insertions(+), 2 deletions(-)
+
+diff --git a/driver/mxpcie.h b/driver/mxpcie.h
+index cfa6cd5..869feec 100644
 --- a/driver/mxpcie.h
 +++ b/driver/mxpcie.h
 @@ -79,8 +79,10 @@
@@ -15,8 +23,8 @@ Index: b/driver/mxpcie.h
  #endif
  
  #ifndef MIN
-Index: b/driver/mxser.c
-===================================================================
+diff --git a/driver/mxser.c b/driver/mxser.c
+index 6322ac7..ad17fdb 100644
 --- a/driver/mxser.c
 +++ b/driver/mxser.c
 @@ -156,8 +156,10 @@

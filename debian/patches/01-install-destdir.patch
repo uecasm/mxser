@@ -1,7 +1,19 @@
-Support install into $DESTDIR.
+From: Gavin Lambert <uecasm@users.noreply.github.com>
+Date: Wed, 12 Apr 2017 15:52:45 +1200
+Subject: Support install into $DESTDIR.
+
+---
+ utility/conf/Makefile | 4 ++--
+ utility/diag/Makefile | 4 ++--
+ utility/mon/Makefile  | 4 ++--
+ utility/term/Makefile | 4 ++--
+ 4 files changed, 8 insertions(+), 8 deletions(-)
+
+diff --git a/utility/conf/Makefile b/utility/conf/Makefile
+index 06d9027..7f1468a 100644
 --- a/utility/conf/Makefile
 +++ b/utility/conf/Makefile
-@@ -5,7 +5,7 @@
+@@ -5,7 +5,7 @@ FILES =  conftool.o
  all: muestty
  
  install: muestty
@@ -10,15 +22,17 @@ Support install into $DESTDIR.
  
  muestty: $(FILES)
  	@cc $(FILES) -o muestty
-@@ -18,4 +18,4 @@
+@@ -18,4 +18,4 @@ clean:
  	@rm -f muestty
  
  uninstall:
 -	@rm -f /usr/bin/muestty
 +	@rm -f $(DESTDIR)/usr/bin/muestty
+diff --git a/utility/diag/Makefile b/utility/diag/Makefile
+index f2f30c8..f6dd426 100644
 --- a/utility/diag/Makefile
 +++ b/utility/diag/Makefile
-@@ -4,7 +4,7 @@
+@@ -4,7 +4,7 @@ FILES =  diag.o ../global.o
  all:		msdiag
  
  install: msdiag
@@ -27,15 +41,17 @@ Support install into $DESTDIR.
  
  msdiag: 	$(FILES)
  	@cc $(FILES) -o msdiag
-@@ -20,4 +20,4 @@
+@@ -20,4 +20,4 @@ clean:
  	@rm -f msdiag
  
  uninstall:
 -	@rm -f /usr/bin/msdiag
 +	@rm -f $(DESTDIR)/usr/bin/msdiag
+diff --git a/utility/mon/Makefile b/utility/mon/Makefile
+index 1b5909f..7df9ef4 100644
 --- a/utility/mon/Makefile
 +++ b/utility/mon/Makefile
-@@ -12,7 +12,7 @@
+@@ -12,7 +12,7 @@ endif
  all:		msmon
  
  install: msmon
@@ -44,15 +60,17 @@ Support install into $DESTDIR.
  
  msmon: 	$(FILES)
  	@cc $(FILES) -o msmon
-@@ -33,4 +33,4 @@
+@@ -33,4 +33,4 @@ clean:
  	@rm -f msmon
  
  uninstall:
 -	@rm -f /usr/bin/msmon
 +	@rm -f $(DESTDIR)/usr/bin/msmon
+diff --git a/utility/term/Makefile b/utility/term/Makefile
+index 3bd877c..a8f2b6b 100644
 --- a/utility/term/Makefile
 +++ b/utility/term/Makefile
-@@ -12,7 +12,7 @@
+@@ -12,7 +12,7 @@ endif
  all:		msterm
  
  install: msterm
@@ -61,7 +79,7 @@ Support install into $DESTDIR.
  
  msterm:	$(FILES)
  	@cc $(FILES) -o msterm
-@@ -44,4 +44,4 @@
+@@ -44,4 +44,4 @@ clean:
  	@rm -f msterm
  
  uninstall:

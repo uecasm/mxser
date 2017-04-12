@@ -1,4 +1,15 @@
-Add Makefile for dkms package.
+From: Gavin Lambert <uecasm@users.noreply.github.com>
+Date: Wed, 12 Apr 2017 15:53:27 +1200
+Subject: Add Makefile for dkms package.
+
+---
+ dkms/Makefile | 11 +++++++++++
+ 1 file changed, 11 insertions(+)
+ create mode 100644 dkms/Makefile
+
+diff --git a/dkms/Makefile b/dkms/Makefile
+new file mode 100644
+index 0000000..3884a06
 --- /dev/null
 +++ b/dkms/Makefile
 @@ -0,0 +1,11 @@

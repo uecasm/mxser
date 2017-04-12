@@ -1,7 +1,19 @@
-Ensure tools are linked statically.
+From: Gavin Lambert <uecasm@users.noreply.github.com>
+Date: Wed, 12 Apr 2017 15:53:23 +1200
+Subject: Ensure tools are linked statically.
+
+---
+ utility/conf/Makefile | 2 +-
+ utility/diag/Makefile | 2 +-
+ utility/mon/Makefile  | 2 +-
+ utility/term/Makefile | 2 +-
+ 4 files changed, 4 insertions(+), 4 deletions(-)
+
+diff --git a/utility/conf/Makefile b/utility/conf/Makefile
+index 7f1468a..2a4f993 100644
 --- a/utility/conf/Makefile
 +++ b/utility/conf/Makefile
-@@ -8,7 +8,7 @@
+@@ -8,7 +8,7 @@ install: muestty
  	@install muestty $(DESTDIR)/usr/bin/
  
  muestty: $(FILES)
@@ -10,9 +22,11 @@ Ensure tools are linked statically.
  
  conftool.o: 	conftool.c 
  	@$(CC)	conftool.c $(HDR_DIR)
+diff --git a/utility/diag/Makefile b/utility/diag/Makefile
+index f6dd426..af9ac20 100644
 --- a/utility/diag/Makefile
 +++ b/utility/diag/Makefile
-@@ -7,7 +7,7 @@
+@@ -7,7 +7,7 @@ install: msdiag
  	@install msdiag $(DESTDIR)/usr/bin/
  
  msdiag: 	$(FILES)
@@ -21,9 +35,11 @@ Ensure tools are linked statically.
  
  diag.o: 	diag.c ../global.h
  	@$(CC)	diag.c
+diff --git a/utility/mon/Makefile b/utility/mon/Makefile
+index 7df9ef4..cb715d0 100644
 --- a/utility/mon/Makefile
 +++ b/utility/mon/Makefile
-@@ -15,7 +15,7 @@
+@@ -15,7 +15,7 @@ install: msmon
  	@install msmon $(DESTDIR)/usr/bin/
  
  msmon: 	$(FILES)
@@ -32,9 +48,11 @@ Ensure tools are linked statically.
  
  
  mon_p.o: 	mon_p.c ../global.h
+diff --git a/utility/term/Makefile b/utility/term/Makefile
+index a8f2b6b..4288022 100644
 --- a/utility/term/Makefile
 +++ b/utility/term/Makefile
-@@ -15,7 +15,7 @@
+@@ -15,7 +15,7 @@ install: msterm
  	@install msterm $(DESTDIR)/usr/bin/
  
  msterm:	$(FILES)
