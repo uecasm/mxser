@@ -1,4 +1,10 @@
-mxser (1.16+14030317-1) UNRELEASED; urgency=medium
+mxser (1.16+14030317-2) stable; urgency=medium
+
+  * Simplified dependencies.
+
+ -- Gavin Lambert <debian@mirality.co.nz>  Thu, 06 Jul 2017 14:54:25 +1200
+
+mxser (1.16+14030317-1) stable; urgency=medium
 
   * Initial release.
 

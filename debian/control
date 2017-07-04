@@ -6,14 +6,14 @@ Source: mxser
 Section: non-free/kernel
 Priority: extra
 Maintainer: Gavin Lambert <debian@mirality.co.nz>
-Build-Depends: debhelper (>=9), dkms, linux-libc-dev, linux-kbuild-4.9
+Build-Depends: debhelper (>=9), dkms, linux-libc-dev
 Standards-Version: 3.9.8
 Homepage: http://www.moxa.com/support/download.aspx?type=support&id=1122
 
 Package: mxser-dkms
 Architecture: linux-any
 Multi-Arch: foreign
-Depends: ${misc:Depends}, linux-kbuild-4.9
+Depends: ${misc:Depends}, dkms
 Recommends: mxser-tools
 Description: DKMS files to build and install mxser and mxupcie
  Drivers for MOXA serial port adapters.
