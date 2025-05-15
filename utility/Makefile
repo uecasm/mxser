@@ -2,8 +2,7 @@
 
 all: msdiag msmon msterm msestty
 
-
-install: diag_install mon_install term_install estty_install
+install: estty_install diag_install
 
 msdiag:
 	cd diag;\
@@ -40,7 +39,7 @@ estty_install:
 
 
 
-clean: global_clean diag_clean mon_clean term_clean estty_clean
+clean: global_clean estty_clean diag_clean
 
 global_clean:
 	rm -f *.o
@@ -61,7 +60,7 @@ estty_clean:
 	cd conf;\
 	make clean
 
-uninstall: diag_uninstall mon_uninstall term_uninstall estty_uninstall
+uninstall: estty_uninstall diag_uninstall
 
 diag_uninstall:
 	cd diag;\

@@ -64,6 +64,10 @@ static	void	flush_menu_data(int now_board);
 static	void	show_timer(int now_board);
 static	void	reset_count();
 static int	getdatacnt(struct Moniter_str *logdata);
+static	void	mx_make_mxser_node();
+static	void	mx_make_mxupcie_node();
+static int	mx_get_mxser_major();
+static int	mx_get_mxupcie_major();
 
 /*****************************************************************************/
 /* STATIC VARIABLES							     */
@@ -104,9 +108,9 @@ static  char    GTtyName[(MXSER_PORTS_PER_BOARD * MXSER_BOARDS)][30];
 
 static  char    GPcieTtyName[(MXSER_PORTS_PER_BOARD * MXSER_BOARDS)][30];
 
-struct mxser_hwconf	Gmxsercfg[MXSER_BOARDS];
+struct mxser_usr_hwconf	Gmxsercfg[MXSER_BOARDS];
 
-struct mxupcie_hwconf	Gmxupciecfg[MXSER_BOARDS * 2];
+struct mxupcie_usr_hwconf	Gmxupciecfg[MXSER_BOARDS * 2];
 
 static	int	card_type[MXSER_BOARDS], total_card;
 
@@ -162,7 +166,7 @@ int	mon_p_setup(int boards)
 		else
 		    flag = MON_NORMAL;
 		while ( (i = mon_pa_setup(menu3.item[0].str[c],
-                        interval, flag, now_board, c)) != 0 ) {
+                        interval, flag, now_board, Gpcibrd_cnt, c)) != 0 ) {
 		    if ( i < 0 && c > 0 )
 			c--;
 		    if ( i > 0 && c < maxrow - 1 )
@@ -385,6 +389,93 @@ static void reset_count()
 	slog_s = slog_old;
 	t1 = time((time_t *)&t3);
 }
+
+static void mx_make_mxser_node()
+{
+	int ret = 0;
+	int major = 20;
+	char cmd[1024];
+	memset(cmd, 0, sizeof(cmd));
+	ret = system("rm -rf /dev/mxser");
+	major = mx_get_mxser_major();
+	if(ret != -1) {
+		sprintf(cmd, "mknod /dev/mxser c %d 32", major);
+		ret = system(cmd);
+		if(ret == -1)
+			return;
+	}
+}
+
+static void mx_make_mxupcie_node()
+{
+	int ret = 0;
+	int major = 31;
+	char cmd[1024];
+	memset(cmd, 0, sizeof(cmd));
+	ret = system("rm -rf /dev/mxupcie");
+	major = mx_get_mxupcie_major();
+	if(ret != -1) {
+		sprintf(cmd, "mknod /dev/mxupcie c %d 32", major);
+		ret = system(cmd);
+		if(ret == -1)
+			return;
+	}
+}
+
+static int mx_get_mxser_major()
+{
+	FILE *fstream = NULL;
+	char buff[1024];
+	int major = 30;
+	memset(buff, 0, sizeof(buff));
+
+	if(NULL == (fstream = popen("cat /proc/devices | grep -w ttyM | cut -c1-3 | cut -f2 -d' '","r")))
+        {
+                //fprintf(stderr, "execute command failed: %s", strerror(errno));
+
+		//get major number failed, return default major number.
+		return major;
+        }
+
+        while(NULL != fgets(buff, sizeof(buff), fstream))
+        {
+                //printf("%s", buff);
+                if(atoi(buff) >= 0){
+                        major = atoi(buff);
+                }
+        }
+
+        pclose(fstream);
+        return major;
+}
+
+static int mx_get_mxupcie_major()
+{
+	FILE *fstream = NULL;
+	char buff[1024];
+	int major = 31;
+	memset(buff, 0, sizeof(buff));
+
+	if(NULL == (fstream = popen("cat /proc/deivces | grep -w ttyMUE | cut -c1-3 | cut -f2 -d' '","r")))
+        {
+                //fprintf(stderr, "execute command failed: %s", strerror(errno));
+
+		//get major number failed, return default major number.
+                return major;
+        }
+
+        while(NULL != fgets(buff, sizeof(buff), fstream))
+        {
+                //printf("%s", buff);
+                if(atoi(buff) >= 0){
+                        major = atoi(buff);
+                }
+        }
+
+        pclose(fstream);
+        return major;
+}
+
 void read_pcietty(int now_major)
 {
 
@@ -554,14 +645,21 @@ int main()
 	pcie_ret = 0;
 	if ((fd = open("/dev/mxser", O_RDWR)) < 0) {
  		if (errno == ENOENT) {
-	    	printf("open /dev/mxser fail\n");
-	    	printf("Please run msmknod first.\n");	    
+			mx_make_mxser_node();
+			if ((fd = open("/dev/mxser", O_RDWR)) < 0) {
+				printf("open /dev/mxser fail\n");
+			    	printf("Please run msmknod first.\n");
+				pci_ret = -1;
+				goto nopci;
+			}
 		} else if(errno == ENXIO) {
 			printf("Please load `mxser' driver first.\n");
+			pci_ret = -1;
+			goto nopci;
+		} else {
+			pci_ret = -1;
+			goto nopci;
 		}
-    	
-	    pci_ret = -1;
-	    goto nopci;
 	}
 	ret = ioctl(fd, MOXA_GET_CONF , Gmxsercfg);
 	if(ret != 0){
@@ -580,14 +678,21 @@ int main()
 nopci:
 	if ((pcie_fd = open("/dev/mxupcie", O_RDWR)) < 0) {
 		if (errno == ENOENT) {
-	    	printf("open /dev/mxupcie fail\n");
-	    	printf("Please run msmknod first.\n");	    
+		mx_make_mxupcie_node();
+		if ((pcie_fd = open("/dev/mxupcie", O_RDWR)) < 0) {
+		    	printf("open /dev/mxupcie fail\n");
+	    		printf("Please run msmknod first.\n");
+	    		pcie_ret = -1;
+	    		goto nopcie;
+		}
 		} else if(errno == ENXIO) {
 			printf("Please load `mxupcie' driver first.\n");
+			pcie_ret = -1;
+	    		goto nopcie;
+		} else {
+		    pcie_ret = -1;
+		    goto nopcie;
 		}
-
-	    pcie_ret = -1;
-	    goto nopcie;
 	}
 	
 	ret = ioctl(pcie_fd, MOXA_GET_CONF , &Gmxupciecfg[Gpcibrd_cnt]);

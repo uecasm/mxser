@@ -19,16 +19,24 @@
 /*****************************************************************************/
 
 #include <stdio.h>
+#include <stdlib.h>
+#include <string.h>
 #include <fcntl.h>
 #include <errno.h>
+#include <unistd.h>
+#include <sys/ioctl.h>
 
-char DIAG_VER[] = "1.4";
+char DIAG_VER[] = "1.5";
 #include "../global.h"
 
 #define	MOXA_GET_MAJOR       (MOXA + 63)
 #define	MOXA_GET_CUMAJOR     (MOXA + 64)
 
 static void Printf(int verbose, char *msg);
+static void mx_make_mxser_node();
+static void mx_make_mxupcie_node();
+static int mx_get_mxser_major();
+static int mx_get_mxupcie_major();
 static void mx_show_help();
 
 int main(int argc, char *argv[])
@@ -40,8 +48,8 @@ int main(int argc, char *argv[])
 	int verbose = 0, c;
     int     calloutmajor, major, pcie_calloutmajor, pcie_major;
 	char    title_str[100];
-	struct mxser_hwconf mxsercfg[MXSER_BOARDS];
-	struct mxupcie_hwconf mxupciecfg[MXSER_BOARDS];
+	struct mxser_usr_hwconf mxsercfg[MXSER_BOARDS];
+	struct mxupcie_usr_hwconf mxupciecfg[MXSER_BOARDS];
 
 
     while ((c = getopt(argc, argv, "ph")) != -1) {
@@ -61,45 +69,56 @@ int main(int argc, char *argv[])
     printf("- PCI -\n");
 
 	if ((fd = open("/dev/mxser", O_RDWR)) < 0) {
-		if (errno == ENOENT)
-			Printf(verbose, "\t[Info] Open PCI failed, please run msmknod first.\n");
-		else if (errno == ENXIO)
+		if (errno == ENOENT) {
+			mx_make_mxser_node();
+			if ((fd = open("/dev/mxser", O_RDWR)) < 0) {
+				Printf(verbose, "\t[Info] Open PCI failed, please run msmknod first.\n");
+			    retpci = -1;
+			    goto no_pci;
+			}
+		}
+		else if (errno == ENXIO){
 			Printf(verbose, "\t[Info] Open PCI failed, please load `mxser' driver first.\n");
-	    retpci = -1;
-	    goto no_pci;
+			retpci = -1;
+			goto no_pci;
+		}
+		else {
+			retpci = -1;
+			goto no_pci;
+		}
 	}
 	if (ioctl(fd, MOXA_GET_MAJOR, &major)<0) {
             printf("\tCan't get tty major number.\n");
             close(fd);
             return 1;
-        }
-        printf("\tPCI tty device major number= %d.\n", major);
+    }
+    printf("\tPCI tty device major number= %d.\n", major);
 	
 	
 	if (ioctl(fd, MOXA_GET_CUMAJOR, &calloutmajor)<0) {
             printf("\tCan't get callout device major number.\n");
             close(fd);
             return 1;
-        }
-        printf("\tPCI callout device major number= %d.\n\n", calloutmajor);
+    }
+    printf("\tPCI callout device major number= %d.\n\n", calloutmajor);
 	
 	if (ioctl(fd, MOXA_GET_CONF, mxsercfg) < 0) {
             printf("\tCan't get driver configuration.\n");
             close(fd);
             return 1;
-        }
+    }
 	close(fd);
 	for (i = 0; i < MXSER_BOARDS; i++) {
 	    if (mxsercfg[i].board_type == -1)
 	    	continue;
+
 	    retpci = 1;
 	    ports = mxser_numports[mxsercfg[i].board_type-1];
-
             if ((mxsercfg[i].pciInfo.busNum == 0) && 
                (mxsercfg[i].pciInfo.devNum == 0)) {
                 //ISA board
-		printf("\tBoard %d : %s\n", i+1,
- 			mxser_brdname[mxsercfg[i].board_type-1]);
+		printf("\tBoard %d : %s \n", +1,
+			mxser_brdname[mxsercfg[i].board_type-1]);
       	    
       	        for (j = 0; j < ports && j < MXSER_PORTS_PER_BOARD; j++) {
       		    if (mxsercfg[i].baud[j] == 115200)
@@ -133,12 +152,23 @@ no_pci:
 	printf("- PCIe -\n");
 
 	if ((pcie_fd = open("/dev/mxupcie", O_RDWR)) < 0) {
-		if (errno == ENOENT)
-			Printf(verbose, "\t[Info] Open PCIe failed, please run msmknod first.\n");
-		else if (errno == ENXIO)
+		if (errno == ENOENT) {
+			mx_make_mxupcie_node();
+			if ((pcie_fd = open("/dev/mxupcie", O_RDWR)) < 0) {
+				Printf(verbose, "\t[Info] Open PCIe failed, please run msmknod first.\n");
+			    retpci = -1;
+			    goto no_pcie;
+			}
+		}
+		else if (errno == ENXIO){
 			Printf(verbose, "\t[Info] Open PCIe failed, please load `mxupcie' driver first.\n");
-		retpcie = -1;
-		goto no_pcie;
+			retpci = -1;
+			goto no_pcie;
+		}
+		else {
+			retpci = -1;
+			goto no_pcie;
+		}
 	}
 	
 	if (ioctl(pcie_fd, MOXA_GET_MAJOR, &pcie_major ) < 0) {
@@ -213,6 +243,92 @@ static void Printf(int verbose, char *msg)
 {                                                                                                                                                                                          
     if(verbose)                                                                                                                                                          
         printf("%s", msg);                                                                                                                                  
+}
+
+static void mx_make_mxser_node()
+{
+	int ret = 0;
+	int major = 20;
+	char cmd[1024];
+	memset(cmd, 0, sizeof(cmd));
+	ret = system("rm -rf /dev/mxser");
+	major = mx_get_mxser_major();
+	if(ret != -1) {
+		sprintf(cmd, "mknod /dev/mxser c %d 32", major);
+		ret = system(cmd);
+		if(ret == -1)
+			return;
+	}
+}
+
+static void mx_make_mxupcie_node()
+{
+	int ret = 0;
+	int major = 31;
+	char cmd[1024];
+	memset(cmd, 0, sizeof(cmd));
+	ret = system("rm -rf /dev/mxupcie");
+	major = mx_get_mxupcie_major();
+	if(ret != -1) {
+		sprintf(cmd, "mknod /dev/mxupcie c %d 32", major);
+		ret = system(cmd);
+		if(ret == -1)
+			return;
+	}
+}
+
+static int mx_get_mxser_major()
+{
+	FILE *fstream = NULL;
+	char buff[1024];
+	int major = 30;
+	memset(buff, 0, sizeof(buff));
+
+	if(NULL == (fstream = popen("cat /proc/devices | grep -w ttyM | cut -c1-3 | cut -f2 -d' '","r")))
+        {
+                //fprintf(stderr, "execute command failed: %s", strerror(errno));
+
+		//get major number failed, return default major number.
+		return major;
+        }
+
+        while(NULL != fgets(buff, sizeof(buff), fstream))
+        {
+                //printf("%s", buff);
+                if(atoi(buff) >= 0){
+                        major = atoi(buff);
+                }
+        }
+
+        pclose(fstream);
+        return major;
+}
+
+static int mx_get_mxupcie_major()
+{
+	FILE *fstream = NULL;
+	char buff[1024];
+	int major = 31;
+	memset(buff, 0, sizeof(buff));
+
+	if(NULL == (fstream = popen("cat /proc/devices | grep -w ttyMUE | cut -c1-3 | cut -f2 -d' '","r")))
+        {
+                //fprintf(stderr, "execute command failed: %s", strerror(errno));
+
+		//get major number failed, return default major number.
+                return major;
+        }
+
+        while(NULL != fgets(buff, sizeof(buff), fstream))
+        {
+                //printf("%s", buff);
+                if(atoi(buff) >= 0){
+                        major = atoi(buff);
+                }
+        }
+
+        pclose(fstream);
+        return major;
 }
 
 static void mx_show_help()                

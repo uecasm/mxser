@@ -24,6 +24,8 @@ extern void time_delay();
 #include "gpio.h"
 #include "cpld.h"
 
+#define MX_RETRY_CNT 5
+
 /** \fn mxCPLDInit
  *   \brief Initiate CPLD.
  *
@@ -222,67 +224,86 @@ int mxCPLDRead(gpio_param_t io_param, unsigned char addr, unsigned char *data)
 {
     unsigned char chCurrentOutput;
     unsigned char chOutput;
+	unsigned char chData[MX_RETRY_CNT], chCnt[MX_RETRY_CNT];
+	int i, j;
 
-    if(io_param.base == NULL)
-        return MX_CPLD_ERR;
+	/* Find the value which occurs more than twice */
+	for (i = 0; i < MX_RETRY_CNT; i++) {
 
-    if(data == NULL)
-        return MX_CPLD_ERR;
+		if(io_param.base == NULL)
+			return MX_CPLD_ERR;
 
-    /* Setup Chip into read state */
-    mxCPLDSetDirection(io_param, MX_CPLD_READ);
+		if(data == NULL)
+			return MX_CPLD_ERR;
 
-    /* Change Data pins status into Output for addr setting */
-    mxGPIOSetConfig(io_param, MX_CPLD_DATA_PIN_0, MX_GPIO_STATE_OUTPUT);
-    mxGPIOSetConfig(io_param, MX_CPLD_DATA_PIN_1, MX_GPIO_STATE_OUTPUT);
-    mxGPIOSetConfig(io_param, MX_CPLD_DATA_PIN_2, MX_GPIO_STATE_OUTPUT);
-    mxGPIOSetConfig(io_param, MX_CPLD_DATA_PIN_3, MX_GPIO_STATE_OUTPUT);
-    mxGPIOSetConfig(io_param, MX_CPLD_DATA_PIN_4, MX_GPIO_STATE_OUTPUT);
+		/* Setup Chip into read state */
+		mxCPLDSetDirection(io_param, MX_CPLD_READ);
 
-    /* Back up GPIO status */
-    mxGPIOCurrentWriteAll(io_param, &chCurrentOutput);
+		/* Change Data pins status into Output for addr setting */
+		mxGPIOSetConfig(io_param, MX_CPLD_DATA_PIN_0, MX_GPIO_STATE_OUTPUT);
+		mxGPIOSetConfig(io_param, MX_CPLD_DATA_PIN_1, MX_GPIO_STATE_OUTPUT);
+		mxGPIOSetConfig(io_param, MX_CPLD_DATA_PIN_2, MX_GPIO_STATE_OUTPUT);
+		mxGPIOSetConfig(io_param, MX_CPLD_DATA_PIN_3, MX_GPIO_STATE_OUTPUT);
+		mxGPIOSetConfig(io_param, MX_CPLD_DATA_PIN_4, MX_GPIO_STATE_OUTPUT);
 
-    /* Setup address */
-    chOutput = 0;
-    chOutput = chCurrentOutput & MX_CPLD_CTRL_MASK;
-    chOutput |= (addr & MX_CPLD_DATA_MASK);
+		/* Back up GPIO status */
+		mxGPIOCurrentWriteAll(io_param, &chCurrentOutput);
 
-    /* Write address */
-    mxGPIOWriteAll(io_param, chOutput);
+		/* Setup address */
+		chOutput = 0;
+		chOutput = chCurrentOutput & MX_CPLD_CTRL_MASK;
+		chOutput |= (addr & MX_CPLD_DATA_MASK);
 
-    /* Change into address type */
-    mxCPLDSetType(io_param, MX_CPLD_TYPE_ADDR);
+		/* Write address */
+		mxGPIOWriteAll(io_param, chOutput);
 
-    /* Enable Chip */
-    if(mxCPLDEnable(io_param) != MX_CPLD_OK)
-        return MX_CPLD_ERR;
+		/* Change into address type */
+		mxCPLDSetType(io_param, MX_CPLD_TYPE_ADDR);
 
-    /* Wait one CPLD clock, which about 70 ns */
-    MXCPLD_SLEEP(1);
+		/* Enable Chip */
+		if(mxCPLDEnable(io_param) != MX_CPLD_OK)
+			return MX_CPLD_ERR;
 
-    /* Change into data type */
-    mxCPLDSetType(io_param, MX_CPLD_TYPE_DATA);
+		/* Wait one CPLD clock, which about 70 ns */
+		MXCPLD_SLEEP(1);
 
-    /* Change Data pins status into Input for data reading */
-    mxGPIOSetConfig(io_param, MX_CPLD_DATA_PIN_0, MX_GPIO_STATE_INPUT);
-    mxGPIOSetConfig(io_param, MX_CPLD_DATA_PIN_1, MX_GPIO_STATE_INPUT);
-    mxGPIOSetConfig(io_param, MX_CPLD_DATA_PIN_2, MX_GPIO_STATE_INPUT);
-    mxGPIOSetConfig(io_param, MX_CPLD_DATA_PIN_3, MX_GPIO_STATE_INPUT);
-    mxGPIOSetConfig(io_param, MX_CPLD_DATA_PIN_4, MX_GPIO_STATE_INPUT);
+		/* Change into data type */
+		mxCPLDSetType(io_param, MX_CPLD_TYPE_DATA);
 
-    /* Wait one CPLD clock, which about 70 ns */
-    MXCPLD_SLEEP(1);
+		/* Change Data pins status into Input for data reading */
+		mxGPIOSetConfig(io_param, MX_CPLD_DATA_PIN_0, MX_GPIO_STATE_INPUT);
+		mxGPIOSetConfig(io_param, MX_CPLD_DATA_PIN_1, MX_GPIO_STATE_INPUT);
+		mxGPIOSetConfig(io_param, MX_CPLD_DATA_PIN_2, MX_GPIO_STATE_INPUT);
+		mxGPIOSetConfig(io_param, MX_CPLD_DATA_PIN_3, MX_GPIO_STATE_INPUT);
+		mxGPIOSetConfig(io_param, MX_CPLD_DATA_PIN_4, MX_GPIO_STATE_INPUT);
 
-    /* Read from data pins */
-    mxGPIOReadAll(io_param, data);
-    (*data) = (*data) & MX_CPLD_DATA_MASK;
+		/* Wait one CPLD clock, which about 70 ns */
+		MXCPLD_SLEEP(1);
 
-    /* Do not have to restore direction pin because it default setting is read,
-         so we disable chip right away */
-    mxCPLDDisable(io_param);
+		/* Read from data pins */
+		mxGPIOReadAll(io_param, data);
+		(*data) = (*data) & MX_CPLD_DATA_MASK;
+
+		/* Do not have to restore direction pin because it default setting is read,
+		   so we disable chip right away */
+		mxCPLDDisable(io_param);
+
+		/* Store in array */
+		chData[i] = *data;
+		
+		/* Choose the right value */		
+		chCnt[i] = 0;
+		for (j = i - 1; j >= 0; j--) {
+			if (chData[j] == chData[i]) {
+				chCnt[i]++;
+			}
+		}
+		if (chCnt[i] >= (MX_RETRY_CNT/2)) {
+			break;
+		}
+	}
 
     return MX_CPLD_OK;
-
 }
 
 /** \fn mxCPLDWrite
@@ -307,70 +328,82 @@ int mxCPLDWrite(gpio_param_t io_param, unsigned char addr, unsigned char data)
 {
     unsigned char chCurrentOutput;
     unsigned char chOutput;
+	unsigned char chInput;
+	int retry_cnt = MX_RETRY_CNT;
 
-    if(io_param.base == NULL)
-        return MX_CPLD_ERR;
+	if(io_param.base == NULL)
+		return MX_CPLD_ERR;
 
-    /* Setup Chip into write state */
-    mxCPLDSetDirection(io_param, MX_CPLD_WRITE);
+RETRY:
+	/* Setup Chip into write state */
+	mxCPLDSetDirection(io_param, MX_CPLD_WRITE);
 
-    /* Change Data pins status into Output for addr setting */
-    mxGPIOSetConfig(io_param, MX_CPLD_DATA_PIN_0, MX_GPIO_STATE_OUTPUT);
-    mxGPIOSetConfig(io_param, MX_CPLD_DATA_PIN_1, MX_GPIO_STATE_OUTPUT);
-    mxGPIOSetConfig(io_param, MX_CPLD_DATA_PIN_2, MX_GPIO_STATE_OUTPUT);
-    mxGPIOSetConfig(io_param, MX_CPLD_DATA_PIN_3, MX_GPIO_STATE_OUTPUT);
-    mxGPIOSetConfig(io_param, MX_CPLD_DATA_PIN_4, MX_GPIO_STATE_OUTPUT);
+	/* Change Data pins status into Output for addr setting */
+	mxGPIOSetConfig(io_param, MX_CPLD_DATA_PIN_0, MX_GPIO_STATE_OUTPUT);
+	mxGPIOSetConfig(io_param, MX_CPLD_DATA_PIN_1, MX_GPIO_STATE_OUTPUT);
+	mxGPIOSetConfig(io_param, MX_CPLD_DATA_PIN_2, MX_GPIO_STATE_OUTPUT);
+	mxGPIOSetConfig(io_param, MX_CPLD_DATA_PIN_3, MX_GPIO_STATE_OUTPUT);
+	mxGPIOSetConfig(io_param, MX_CPLD_DATA_PIN_4, MX_GPIO_STATE_OUTPUT);
 
-    /* Back up GPIO status */
-    mxGPIOCurrentWriteAll(io_param, &chCurrentOutput);
+	/* Back up GPIO status */
+	mxGPIOCurrentWriteAll(io_param, &chCurrentOutput);
 
-    /* Setup output data */
-    chOutput = 0;
-    chOutput = chCurrentOutput & MX_CPLD_CTRL_MASK;
-    chOutput |= (addr & MX_CPLD_DATA_MASK);
+	/* Setup output data */
+	chOutput = 0;
+	chOutput = chCurrentOutput & MX_CPLD_CTRL_MASK;
+	chOutput |= (addr & MX_CPLD_DATA_MASK);
 
-    /* Write address */
-    mxGPIOWriteAll(io_param, chOutput);
+	/* Write address */
+	mxGPIOWriteAll(io_param, chOutput);
 
-    /* Change into address type */
-    mxCPLDSetType(io_param, MX_CPLD_TYPE_ADDR);
+	/* Change into address type */
+	mxCPLDSetType(io_param, MX_CPLD_TYPE_ADDR);
 
-    /* Enable Chip */
-    if(mxCPLDEnable(io_param) != MX_CPLD_OK)
-        return MX_CPLD_ERR;
+	/* Enable Chip */
+	if(mxCPLDEnable(io_param) != MX_CPLD_OK)
+		return MX_CPLD_ERR;
 
-    /* Wait one CPLD clock, which about 70 ns */
-    MXCPLD_SLEEP(1);
+	/* Wait one CPLD clock, which about 70 ns */
+	MXCPLD_SLEEP(1);	
 
-    /* Change Data pins status into Output for addr setting */
-    mxGPIOSetConfig(io_param, MX_CPLD_DATA_PIN_0, MX_GPIO_STATE_OUTPUT);
-    mxGPIOSetConfig(io_param, MX_CPLD_DATA_PIN_1, MX_GPIO_STATE_OUTPUT);
-    mxGPIOSetConfig(io_param, MX_CPLD_DATA_PIN_2, MX_GPIO_STATE_OUTPUT);
-    mxGPIOSetConfig(io_param, MX_CPLD_DATA_PIN_3, MX_GPIO_STATE_OUTPUT);
-    mxGPIOSetConfig(io_param, MX_CPLD_DATA_PIN_4, MX_GPIO_STATE_OUTPUT);
+	/* Change Data pins status into Output for addr setting */
+	mxGPIOSetConfig(io_param, MX_CPLD_DATA_PIN_0, MX_GPIO_STATE_OUTPUT);
+	mxGPIOSetConfig(io_param, MX_CPLD_DATA_PIN_1, MX_GPIO_STATE_OUTPUT);
+	mxGPIOSetConfig(io_param, MX_CPLD_DATA_PIN_2, MX_GPIO_STATE_OUTPUT);
+	mxGPIOSetConfig(io_param, MX_CPLD_DATA_PIN_3, MX_GPIO_STATE_OUTPUT);
+	mxGPIOSetConfig(io_param, MX_CPLD_DATA_PIN_4, MX_GPIO_STATE_OUTPUT);
 
-    /* Change into data type */
-    mxCPLDSetType(io_param, MX_CPLD_TYPE_DATA);
+	/* Change into data type */
+	mxCPLDSetType(io_param, MX_CPLD_TYPE_DATA);
 
-    /* Back up GPIO status again */
-    mxGPIOCurrentWriteAll(io_param, &chCurrentOutput);
+	/* Back up GPIO status again */
+	mxGPIOCurrentWriteAll(io_param, &chCurrentOutput);
 
-    /* Prepare write data */
-    chOutput = 0;
-    chOutput = chCurrentOutput & MX_CPLD_CTRL_MASK;
-    chOutput |= (data & MX_CPLD_DATA_MASK);
+	/* Prepare write data */
+	chOutput = 0;
+	chOutput = chCurrentOutput & MX_CPLD_CTRL_MASK;
+	chOutput |= (data & MX_CPLD_DATA_MASK);
 
-    /* Write data */
-    mxGPIOWriteAll(io_param, chOutput);
+	/* Write data */
+	mxGPIOWriteAll(io_param, chOutput);
 
-    /* Wait one CPLD clock, which about 70 ns */
-    MXCPLD_SLEEP(1);
+	/* Wait one CPLD clock, which about 70 ns */
+	MXCPLD_SLEEP(1);
 
-    /* Disable Chip*/
-    mxCPLDDisable(io_param);
+	/* Disable Chip*/
+	mxCPLDDisable(io_param);
 
-    return MX_CPLD_OK;
+    if (addr & MX_CPLD_SET_STATE_BASE) {
+		mxCPLDRead(io_param, ((addr & (~MX_CPLD_SET_STATE_BASE))|MX_CPLD_GET_STATE_BASE), &chInput);
+		if (chInput != data) {
+			if (retry_cnt > 0) {
+				retry_cnt--;
+				goto RETRY;
+			}
+		}
+	}
 
+	return MX_CPLD_OK;
 }
 
 /** \fn mxCPLDGetAlarmCode

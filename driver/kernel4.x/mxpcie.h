@@ -12,13 +12,8 @@
 
 #define MOXA_PUART_HWID		0x03
 
-#if (LINUX_VERSION_CODE < VERSION_CODE(2,6,9))
-#define MX_READ_REG	readb
-#define MX_WRITE_REG	writeb
-#else
 #define MX_READ_REG	ioread8
 #define MX_WRITE_REG	iowrite8
-#endif
 #define MX_READ_IOBAR3_REG inb
 #define MX_WRITE_IOBAR3_REG outb
 
@@ -33,7 +28,11 @@
 #define MXUPCIE_BOARDS		4	/* Max. boards */
 #define MXUPCIE_PORTS		32	/* Max. ports */
 #define MXUPCIE_PORTS_PER_BOARD	8	/* Max. ports per board*/
-#define MXUPCIE_ISR_PASS_LIMIT	99999L	
+#ifdef CONFIG_PREEMPT_RT_FULL   /* On real time Linux, we can have a more delays */
+#define MXUPCIE_ISR_PASS_LIMIT	1000000L
+#else
+#define MXUPCIE_ISR_PASS_LIMIT  512
+#endif
 
 #define	MXUPCIE_ERR_IOADDR	-1
 #define	MXUPCIE_ERR_IRQ		-2
@@ -49,14 +48,16 @@
 #define UART_LSR_SPECIAL	0x1E
 
 #define MX_LOCK_INIT()		unsigned long sp_flags=0
-#if 0 
+#if 0
 #define MX_LOCK(lock)		{\
-				printk("in %s\n", __FUNCTION__);\
-				spin_lock_irqsave(lock, flags);\
+				if(!in_interrupt())\
+					printk("LOCK");\
+					spin_lock_irqsave(lock, sp_flags);\
 				}
 #define MX_UNLOCK(lock)		{\
-				printk("out %s\n", __FUNCTION__);\
-				spin_unlock_irqrestore(lock, flags);\
+				if(!in_interrupt())\
+					printk("UNLOCK");\
+					spin_unlock_irqrestore(lock, sp_flags);\
 				}
 #else
 #define MX_LOCK(lock)		{\
@@ -69,19 +70,14 @@
 				}
 #endif
 
-#if (LINUX_VERSION_CODE < VERSION_CODE(2,6,0))
-#define PORTNO(x)	(MINOR((x)->device) - (x)->driver.minor_start)
-#else
+#define MX_CPLD_LOCK(lock)		spin_lock(lock)
+#define MX_CPLD_UNLOCK(lock)	spin_unlock(lock)
+
 #define PORTNO(x)	((x)->index)
-#endif
 
 #define RELEVANT_IFLAG(iflag)	(iflag & (IGNBRK|BRKINT|IGNPAR|PARMRK|INPCK|IXON|IXOFF))
 
-#if (LINUX_VERSION_CODE < VERSION_CODE(2,6,23))
-#define IRQ_T(info) ((info->flags & ASYNC_SHARE_IRQ) ? SA_SHIRQ : SA_INTERRUPT)
-#else
-#define IRQ_T(info) ((info->flags & ASYNC_SHARE_IRQ) ? IRQF_SHARED : IRQF_DISABLED)
-#endif
+#define IRQ_T(info) ((info->flags & ASYNC_SHARE_IRQ) ? IRQF_SHARED : IRQF_TRIGGER_NONE)
 
 #ifndef MIN
 #define MIN(a,b)	((a) < (b) ? (a) : (b))
@@ -118,6 +114,9 @@
 #define SMARTIO_PUART_GET_MASTER_SLAVE	(MOXA + 88)
 #define SMARTIO_PUART_SET_DIAGNOSE	(MOXA + 89)
 #define SMARTIO_PUART_GET_ALARM		(MOXA + 90)
+
+#define SMARTIO_SET_PCI_CAPABILITY	(MOXA + 91)
+#define SMARTIO_GET_PCI_CAPABILITY	(MOXA + 92)
 
 #ifdef CONFIG_PCI
 
@@ -180,6 +179,30 @@
 
 #ifndef	PCI_DEVICE_ID_CP116E_A_B
 #define	PCI_DEVICE_ID_CP116E_A_B	 0x1161
+#endif
+
+#ifndef PCI_DEVICE_ID_CP102N
+#define PCI_DEVICE_ID_CP102N	0x1027
+#endif
+
+#ifndef PCI_DEVICE_ID_CP132N
+#define PCI_DEVICE_ID_CP132N	0x1323
+#endif
+
+#ifndef PCI_DEVICE_ID_CP112N
+#define PCI_DEVICE_ID_CP112N	0x1121
+#endif
+
+#ifndef PCI_DEVICE_ID_CP104N
+#define PCI_DEVICE_ID_CP104N	0x1046
+#endif
+
+#ifndef PCI_DEVICE_ID_CP134N
+#define PCI_DEVICE_ID_CP134N	0x1343
+#endif
+
+#ifndef PCI_DEVICE_ID_CP114N
+#define PCI_DEVICE_ID_CP114N	0x1145
 #endif
 
 #define MOXA_PUART_SFR			0x07
@@ -276,13 +299,8 @@
 #define INIT_FUNC_RET	static int __init
 
 
-#if (LINUX_VERSION_CODE < VERSION_CODE(2,6,0))
-#define DRV_VAR		(&mxvar_sdriver)
-#define DRV_VAR_P(x)	mxvar_sdriver.x
-#else
 #define DRV_VAR		(mxvar_sdriver)
 #define DRV_VAR_P(x)	mxvar_sdriver->x
-#endif
 
 #ifndef INIT_WORK
 #define INIT_WORK(_work, _func, _data){	\
@@ -296,62 +314,28 @@
 #endif
 
 
-#if (LINUX_VERSION_CODE < VERSION_CODE(2,6,0))
-#define IRQ_RET void
-#define IRQ_RETVAL(x)
-#else
 #define IRQ_RET irqreturn_t
-#endif
 
-
-#if (LINUX_VERSION_CODE < VERSION_CODE(2,6,0))
-#define	MXQ_TASK() {\
-		MOD_INC_USE_COUNT;\
-		if (schedule_task(&info->tqueue) == 0)\
-			MOD_DEC_USE_COUNT;\
-	}
-#else
 #define	MXQ_TASK()	schedule_work(&info->tqueue)
-#endif
 
-#if (LINUX_VERSION_CODE < VERSION_CODE(2,6,0))
-#define MX_MOD_INC	MOD_INC_USE_COUNT
-#define MX_MOD_DEC	MOD_DEC_USE_COUNT
-#else
 #define MX_MOD_INC	try_module_get(THIS_MODULE)
 #define MX_MOD_DEC	module_put(THIS_MODULE)	
-#endif
 
-#if (LINUX_VERSION_CODE >= VERSION_CODE(2,6,0))
 #ifndef ASYNC_CALLOUT_ACTIVE
 #define ASYNC_CALLOUT_ACTIVE 0
 #endif
-#endif
 
-
-#if (LINUX_VERSION_CODE >= VERSION_CODE(2,6,0))
 #define MX_TTY_DRV(x)	tty->driver->x
+
+#ifdef VERIFY_WRITE
+#define MX_ACCESS_CHK(type, addr, size)		access_ok(type, addr, size)
 #else
-#define MX_TTY_DRV(x)	tty->driver.x
+#define MX_ACCESS_CHK(type, addr, size)		access_ok(addr, size)
 #endif
 
-#if (LINUX_VERSION_CODE >= VERSION_CODE(2,6,0))
-#define MX_ACCESS_CHK(type, addr, size)	access_ok(type, addr, size)	
-#else
-#define MX_ACCESS_CHK(type, addr, size)	verify_area(type, addr, size)	
-#endif
-
-#if (LINUX_VERSION_CODE >= VERSION_CODE(2,6,0))
 #define MX_ERR(x)	!(x)	
-#else
-#define MX_ERR(x)	x	
-#endif
 
-#if (LINUX_VERSION_CODE >= VERSION_CODE(2,6,0))
 #define GET_FPAGE	__get_free_page	
-#else
-#define GET_FPAGE	get_free_page
-#endif
 
 #ifndef atomic_read
 #define atomic_read(v)	v
@@ -360,6 +344,45 @@
 
 #ifndef UCHAR
 typedef unsigned char	UCHAR;
+#endif
+
+
+#ifndef ASYNCB_SHARE_IRQ
+	#define ASYNCB_SHARE_IRQ	24
+#endif
+#ifndef ASYNC_SHARE_IRQ
+	#define ASYNC_SHARE_IRQ		(1U << ASYNCB_SHARE_IRQ)
+#endif
+#ifndef ASYNCB_CHECK_CD
+	#define ASYNCB_CHECK_CD		25
+#endif
+#ifndef ASYNC_CHECK_CD
+	#define ASYNC_CHECK_CD		(1U << ASYNCB_CHECK_CD)
+#endif
+#ifndef ASYNCB_CTS_FLOW
+	#define ASYNCB_CTS_FLOW		26
+#endif
+#ifndef ASYNC_CTS_FLOW
+	#define ASYNC_CTS_FLOW		(1U << ASYNCB_CTS_FLOW)
+#endif
+#ifndef ASYNCB_CLOSING
+	#define ASYNCB_CLOSING		27
+#endif
+#ifndef ASYNC_CLOSING
+	#define ASYNC_CLOSING		(1U << ASYNCB_CLOSING)
+#endif
+#ifndef ASYNCB_NORMAL_ACTIVE
+	#define ASYNCB_NORMAL_ACTIVE	29
+#endif
+
+#ifndef ASYNC_NORMAL_ACTIVE
+	#define ASYNC_NORMAL_ACTIVE	(1U << ASYNCB_NORMAL_ACTIVE)
+#endif
+#ifndef ASYNCB_INITIALIZED
+	#define ASYNCB_INITIALIZED	31
+#endif
+#ifndef ASYNC_INITIALIZED
+	#define ASYNC_INITIALIZED	(1U << ASYNCB_INITIALIZED)
 #endif
 
 

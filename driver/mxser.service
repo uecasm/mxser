@@ -1,0 +1,10 @@
+[Unit]
+Description=Smartio Service
+ConditionFileIsExecutable=/etc/init.d/rc.mxser
+
+[Service]
+Type=simple
+ExecStart=/etc/init.d/rc.mxser start
+
+[Install]
+WantedBy=multi-user.target

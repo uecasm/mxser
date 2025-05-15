@@ -31,7 +31,13 @@ char *mxupcie_brdname[] = {
         "CP-138E-A series",
         "CP-134EL-A series",
         "CP-116E-A series (A)",
-        "CP-116E-A series (B)"
+        "CP-116E-A series (B)",
+	"CP-102N series",
+	"CP-132N series",
+	"CP-112N series",
+	"CP-104N series",
+	"CP-134N series",
+	"CP-114N series"
 };
 int mxupcie_numports[] = {
         2,      //CP-102E
@@ -45,7 +51,13 @@ int mxupcie_numports[] = {
         8,      //CP-138E-A
         4,      //CP-134EL-A
         8,      //CP-116EA (A)
-        8       //CP-116EA (B)
+        8,      //CP-116EA (B)
+	2,	//CP-102N
+	2,	//CP-132N
+	2,	//CP-112N
+	4,	//CP-104N
+	4,	//CP-134N
+	4	//CP-114N
 };
 char *mxser_brdname[] = {
 	"C168 series",
@@ -79,7 +91,14 @@ char *mxser_brdname[] = {
 	"POS-104UL series",
 	"CP-114UL series", //Lion,2007/05/03
 	"CP-102UF series",
-	"CP-112UL series"
+	"CP-112UL series",
+	/* PC104 series */
+	"CA-104 series",
+	"CA-132 series",
+	"CA-132I series",
+	"CA-108 series",
+	"CA-114 series",
+	"CA-134I series"
 };
 
 int mxser_numports[] = {
@@ -114,5 +133,12 @@ int mxser_numports[] = {
 	4,	//POS-104UL
 	4,	//CP-114UL add by Lion ,2007/05/03
 	2,	//CP-102UF
-	2	//CP-112UL
+	2,	//CP-112UL
+	/* PC104 series */
+	4,	//CA104
+	2,	//CA132
+	2,	//CA132I
+	8,	//CA108
+	4,	//CA114
+	4,	//CA134I
 };

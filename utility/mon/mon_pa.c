@@ -180,20 +180,20 @@ static	struct	pstat_info_str	pinfo;
 #define DSR_SIG 0x02
 #define DCD_SIG 0x04
 static	time_t	t1, t3;
-extern struct mxser_hwconf	Gmxsercfg[MXSER_BOARDS];
-extern struct mxupcie_hwconf	Gmxupciecfg[MXSER_BOARDS];
+extern struct mxser_usr_hwconf	Gmxsercfg[MXSER_BOARDS];
+extern struct mxupcie_usr_hwconf	Gmxupciecfg[MXSER_BOARDS];
 /*****************************************************************************/
 /*	FUNCTIONS							     */
 /*****************************************************************************/
 int	mon_pa_setup(char *devname, int interval,
-                          int flag, int now_board, int port)
+                          int flag, int now_board, int now_pci_board, int port)
 {
 	int	exit_flag=0, err_flag=0, ret=0, old_space_ndx;
 
 	old_space_ndx = init_menu();
 	mw_edit2init(&menu2);
 	t1 = time(&t3);
-	if ( prepare_menu(devname, now_board, port) < 0 )
+	if ( prepare_menu(devname, now_board, now_pci_board, port) < 0 )
 	    err_flag = 1;
 	else
 	    edit2_flush_data(&menu2);
@@ -221,7 +221,7 @@ int	mon_pa_setup(char *devname, int interval,
 		if ( time(&t3) - t1 < interval )
 		    break;
 		t1 = time(&t3);
-		if ( prepare_menu(devname, now_board, port) < 0 )
+		if ( prepare_menu(devname, now_board, now_pci_board, port) < 0 )
 		    err_flag = 1;;
 		edit2_flush_data(&menu2);
 		break;
@@ -257,13 +257,13 @@ static int init_menu(void)
 	return(old_space_ndx);
 }
 
-static int prepare_menu(char *devname, int now_board, int port)
+static int prepare_menu(char *devname, int now_board, int now_pci_board, int port)
 {
 	int	j, i;
 	char	str[20];
 
 	for ( j=0; j<Max_Col; j++ ) {
-	    if ( getstatus(devname, now_board, port) < 0 )
+	    if ( getstatus(devname, now_board, now_pci_board, port) < 0 )
 		return(-1);
 	    for ( i=0; i<10; i++ ) {
 		str[i] = devname[i];
@@ -291,7 +291,7 @@ static int prepare_menu(char *devname, int now_board, int port)
 }
 
 
-static	getstatus(char *devname, int now_board, int port)
+static	int getstatus(char *devname, int now_board, int now_pci_board, int port)
 {
 	int		fd, i, j, idx;
 	char		tmp[80];
@@ -304,7 +304,7 @@ static	getstatus(char *devname, int now_board, int port)
 	    return(-1);
             
 	ioctl(fd, MOXA_GETMSTATUS, mstatus);
-        idx = now_board * MXSER_PORTS_PER_BOARD + port;
+        idx = (now_board - now_pci_board ) * MXSER_PORTS_PER_BOARD + port;
 
         for(i=0;i<20;i++){
             if((mstatus[idx].cflag & (CBAUD | CBAUDEX) ) == BaudMapTab[i]){
