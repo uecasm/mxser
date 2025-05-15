@@ -17,12 +17,12 @@
 ###############################################################################
 
 #Parameters
-MX_MSB_VERSION=1.16
-MX_RELEASE=3.11.0
-MX_VERSION=3
-MX_PATCH_LEVEL=11
+MX_MSB_VERSION=`awk '{if($2=="MX_SER_VERSION"){print $3}}' ../../mx_ver.h | sed s/\"//g`
+MX_RELEASE=4.20.0
+MX_VERSION=4
+MX_PATCH_LEVEL=20
 MX_SUBLEVEL=0
-MX_RELEASE_DATE=2014/03/03
+MX_RELEASE_DATE=`awk '{if($2=="MX_SER_DATE"){print $3}}' ../../mx_ver.h | sed s/\"//g`
 MX_VERSION_CODE=$(( ($MX_VERSION<<16)+($MX_PATCH_LEVEL<<8)+$MX_SUBLEVEL ))
 
 K_MODULE_VERSION=$(uname -r)
@@ -38,8 +38,9 @@ LINUX_DIS=$(grep '[0-9]' /etc/issue )
 #Information
 echo "**********************************************************************"
 echo " $LINUX_DIS $K_MODULE_VERSION"
-echo " MOXA Smartio/Industio Family Multiport Board Device Driver ver $MX_MSB_VERSION"
-echo " Release Date: $MX_RELEASE_DATE"
+echo " MOXA Smartio/Industio Family Multiport Board Device Driver $MX_MSB_VERSION"
+echo -n " Release Date: "
+echo $MX_RELEASE_DATE
 echo "**********************************************************************"
 
 #Check kernel source

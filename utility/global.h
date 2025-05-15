@@ -36,43 +36,37 @@
 #define		CMSPAR 010000000000 /* mark/space parity */
 #endif
 
-#define		BOARD_TYPE	32	
+#define		BOARD_TYPE	38	
 
-typedef struct _moxa_pci_info{
+typedef struct __attribute__((__packed__)) _moxa_pci_usr_info{
 	unsigned short busNum;
 	unsigned short devNum;
-	struct pci_dev *pdev;
-} moxa_pci_info;
+} moxa_pci_usr_info;
 
-struct mxser_hwconf{
+struct __attribute__((__packed__)) mxser_usr_hwconf{
 	int	board_type;
-	int	ports;
-	int	irq;
-	unsigned long	vector;
-	unsigned long	vector_mask;
-	int	uart_type;
 	unsigned long	ioaddr[MXSER_PORTS_PER_BOARD];
 	int	baud[MXSER_PORTS_PER_BOARD];
-	moxa_pci_info pciInfo;
+	moxa_pci_usr_info pciInfo;
 	int	IsMoxaMustChipFlag;
 	int	MaxCanSetBaudRate[MXSER_PORTS_PER_BOARD];
-	unsigned long	opmode_ioaddr[MXSER_PORTS_PER_BOARD];
 };
 
-struct mxupcie_hwconf{
+
+struct __attribute__((__packed__)) mxupcie_usr_hwconf{
 	int	board_type;
-	int	ports;
-	int	irq;
-	unsigned long   iobar3_addr;
-	unsigned long vector_mask;
-	int	uart_type;
 	unsigned char *	ioaddr[MXSER_PORTS_PER_BOARD];
 	int	baud[MXSER_PORTS_PER_BOARD];
-	moxa_pci_info pciInfo;
+	moxa_pci_usr_info pciInfo;
 	int 	IsMoxaMustChipFlag;
 	int	MaxCanSetBaudRate[MXSER_PORTS_PER_BOARD];
-	unsigned long	opmode_ioaddr[MXSER_PORTS_PER_BOARD];
 };
+
+struct __attribute__((__packed__)) mxupcie_pci_setting{
+	int	whichPciBoard;
+	int	cfg_value;
+};
+
 enum	{
 	MXSER_BOARD_C168_ISA = 1,
 	MXSER_BOARD_C104_ISA,
@@ -105,7 +99,14 @@ enum	{
 	MXSER_BOARD_POS104UL,
 	MXSER_BOARD_CP114UL, //30
 	MXSER_BOARD_CP102UF,
-	MXSER_BOARD_CP112UL
+	MXSER_BOARD_CP112UL,
+	/* PC104 series */
+	MXSER_PC_BOARD_CA104,
+	MXSER_PC_BOARD_CA132,
+	MXSER_PC_BOARD_CA132I,
+	MXSER_PC_BOARD_CA108,
+	MXSER_PC_BOARD_CA114,
+	MXSER_PC_BOARD_CA134I
 };
 
 enum    {
@@ -120,7 +121,13 @@ enum    {
         MXUPCIE_BOARD_CP138E_A,   /* Support New Ioctl AutoMode etc... */
         MXUPCIE_BOARD_CP134EL_A,  /* Support New Ioctl AutoMode etc... */
         MXUPCIE_BOARD_CP116E_A_A,  /* Support New Ioctl AutoMode etc, It the first part of 16 port */
-        MXUPCIE_BOARD_CP116E_A_B  /* Support New Ioctl AutoMode etc, It the second part of 16 port */
+        MXUPCIE_BOARD_CP116E_A_B,  /* Support New Ioctl AutoMode etc, It the second part of 16 port */
+	MXUPCIE_BOARD_CP102N,
+	MXUPCIE_BOARD_CP132N,
+	MXUPCIE_BOARD_CP112N,
+	MXUPCIE_BOARD_CP104N,
+	MXUPCIE_BOARD_CP134N,
+	MXUPCIE_BOARD_CP114N
 };
 
 extern  char *mxser_brdname[];

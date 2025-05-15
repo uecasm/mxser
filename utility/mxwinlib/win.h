@@ -254,44 +254,44 @@ extern	void	mw_end();
 extern	int	mw_kbhit();
 extern	int	mw_getkey();
 extern	int	mw_inskey();
-extern	void	mw_cursor();
-extern	void	mw_cursor_type();
-extern	void	mw_attr();
+extern	void	mw_cursor(int, int);
+extern	void	mw_cursor_type(int, int);
+extern	void	mw_attr(int);
 extern	void	mw_clearscreen();
-extern	void	mw_putstr();
-extern	void	mw_putstr_xy();
-extern	void	mw_putchar();
-extern	void	mw_putchar_c();
-extern	void	mw_putnpchar();
-extern	void	mw_putnpchar_c();
+extern	void	mw_putstr(uchar *, int);
+extern	void	mw_putstr_xy(uchar *, int, int, int);
+extern	void	mw_putchar(uchar);
+extern	void	mw_putchar_c(uchar, int, int);
+extern	void	mw_putnpchar(uchar);
+extern	void	mw_putnpchar_c(uchar, int, int);
 extern	void	mw_cursor_off();
 extern	void	mw_cursor_on();
-extern	void	mw_displaywindow();
+extern	void	mw_displaywindow(int, int, int, int, int);
 extern	void	mw_redraw();
-extern	void	mw_getwindow();
-extern	void	mw_putwindow();
-extern	void	mw_clearwindow();
-extern	void	mw_fillbox();
-extern	void	mw_scroll_up();
-extern	void	mw_scroll_down();
-extern	void	mw_line();
-extern	void	mw_lineclip();
+extern	void	mw_getwindow(int, int, int, int, uchar);
+extern	void	mw_putwindow(int, int, int, int, uchar);
+extern	void	mw_clearwindow(int, int, int, int);
+extern	void	mw_fillbox(int, int, int, int, uchar);
+extern	void	mw_scroll_up(int, int, int, int);
+extern	void	mw_scroll_down(int, int, int, int);
+extern	void	mw_line(int, int, int, int);
+extern	void	mw_lineclip(int, int, int, int);
 
 /* win-1 functions declaration */
 extern	void	mw_winit();
 extern	void	mw_wend();
-extern	WINDOW	*mw_wopen();
-extern	void	mw_wstore();
-extern	void	mw_wrestore();
-extern	void	mw_wscroll_up();
-extern	void	mw_wscroll_down();
-extern	void	mw_wputchc();
-extern	void	mw_wputsc();
-extern	void	mw_wprintc();
-extern	void	mw_wline();
-extern	void	mw_wdrawbox();
-extern	void	mw_wcputs();
-extern	void	mw_wclseol();
+extern	WINDOW	*mw_wopen(int, int, int, int);
+extern	void	mw_wstore(WINDOW *);
+extern	void	mw_wrestore(WINDOW *);
+extern	void	mw_wscroll_up(WINDOW *, int, int, int, int);
+extern	void	mw_wscroll_down(WINDOW *, int, int, int, int);
+extern	void	mw_wputchc(WINDOW *, uchar, int);
+extern	void	mw_wputsc(WINDOW *, uchar *, int, int);
+extern	void	mw_wprintc(WINDOW *, uchar *, int);
+extern	void	mw_wline(WINDOW *, int, int);
+extern	void	mw_wdrawbox(WINDOW *, int);
+extern	void	mw_wcputs(WINDOW *, int, char *);
+extern	void	mw_wclseol(WINDOW *);
 extern	int	_getstr();
 #define mw_wclose(wid)		{ (wid)->flag = 0; }
 #define mw_wcolor(wid, c)	{ (wid)->color = (c); }
@@ -314,29 +314,29 @@ extern	int	_getstr();
 				_getstr(x, y, str, len, bar_c, field_c)
 
 /* win-1b functions declaration */
-extern	void	display_select();
-extern	int	_mw_select();
-extern	int	_edit();
-extern	int	edit_select();
-extern	void	display_edit();
+extern	void	display_select(struct WSelect *);
+extern	int	_mw_select(struct WSelect *);
+extern	int	_edit(struct WEdit *);
+extern	int	edit_select(struct WEdit *);
+extern	void	display_edit(struct WEdit *);
 
 /* win-2 functions declaration */
-extern	void	mw_selectinit();
+extern	void	mw_selectinit(struct WSelect *);
 extern	int	mw_select();
 extern	void	mw_selectend();
-extern	void	mw_select_set_act();
-extern	void	mw_editinit();
+extern	void	mw_select_set_act(struct WSelect *, int);
+extern	void	mw_editinit(struct WEdit *);
 extern	int	mw_edit();
 extern	void	mw_editend();
 
 /* win-3 functions declaration */
-extern	void	mw_edit2init();
+extern	void	mw_edit2init(struct GEdit2 *);
 extern	int	mw_edit2();
 extern	int	_edit2();
 extern	int	mw_edit2end();
-extern	void	edit2_flush_data();
-extern	void	edit2_clear_data();
-extern	int	edit2_select();
+extern	void	edit2_flush_data(struct GEdit2 *);
+extern	void	edit2_clear_data(struct GEdit2 *);
+extern	int	edit2_select(struct GEdit2 *);
 
 /* GLOBAL VARIABLES */
 extern	uchar	Blank[80];		/* Blank string for convenience */

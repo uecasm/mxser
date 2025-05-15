@@ -391,31 +391,14 @@
 #define READ_MOXA_MUST_GDL(baseio)	inb((baseio)+MOXA_MUST_GDL_REGISTER)
 
 
-#if (LINUX_VERSION_CODE < VERSION_CODE(2,4,0))
-#define CLEAR_FUNC 	cleanup_module
-#define CLEAR_FUNC_RET	void
-#else
 #define CLEAR_FUNC 	mxser_module_exit
 #define CLEAR_FUNC_RET	static void __exit
-#endif
 
-
-#if (LINUX_VERSION_CODE < VERSION_CODE(2,4,0))
-#define INIT_FUNC 	init_module
-#define INIT_FUNC_RET	int
-#else
 #define INIT_FUNC 	mxser_module_init
 #define INIT_FUNC_RET	static int __init
-#endif
 
-
-#if (LINUX_VERSION_CODE < VERSION_CODE(2,6,0))
-#define DRV_VAR		(&mxvar_sdriver)
-#define DRV_VAR_P(x)	mxvar_sdriver.x
-#else
 #define DRV_VAR		(mxvar_sdriver)
 #define DRV_VAR_P(x)	mxvar_sdriver->x
-#endif
 
 #ifndef INIT_WORK
 #define INIT_WORK(_work, _func, _data){	\
@@ -428,83 +411,32 @@
 #define	set_current_state(x) 		current->state = x
 #endif
 
-
-#if (LINUX_VERSION_CODE < VERSION_CODE(2,6,0))
-#define IRQ_RET void
-#define IRQ_RETVAL(x)
-#else
 #define IRQ_RET irqreturn_t
-#endif
 
-
-#if (LINUX_VERSION_CODE < VERSION_CODE(2,6,0))
-#if (LINUX_VERSION_CODE >= VERSION_CODE(2,4,0))
-#define	MXQ_TASK() {\
-		MOD_INC_USE_COUNT;\
-		if (schedule_task(&info->tqueue) == 0)\
-			MOD_DEC_USE_COUNT;\
-	}
-#else
-#define MXQ_TASK()	queue_task(&info->tqueue,&tq_scheduler)
-#endif
-#else
 #define	MXQ_TASK()	schedule_work(&info->tqueue)
-#endif
 
-#if (LINUX_VERSION_CODE < VERSION_CODE(2,6,0))
-#define MX_MOD_INC	MOD_INC_USE_COUNT
-#define MX_MOD_DEC	MOD_DEC_USE_COUNT
-#else
 #define MX_MOD_INC	try_module_get(THIS_MODULE)
 #define MX_MOD_DEC	module_put(THIS_MODULE)	
-#endif
 
-#if (LINUX_VERSION_CODE >= VERSION_CODE(2,6,0))
 #ifndef ASYNC_CALLOUT_ACTIVE
 #define ASYNC_CALLOUT_ACTIVE 0
 #endif
-#endif
 
-
-#if (LINUX_VERSION_CODE >= VERSION_CODE(2,6,0))
 #define MX_TTY_DRV(x)	tty->driver->x
-#else
-#define MX_TTY_DRV(x)	tty->driver.x
-#endif
 
-#if (LINUX_VERSION_CODE >= VERSION_CODE(2,6,5))
-#if (LINUX_VERSION_CODE > VERSION_CODE(2,6,19))
 #define MX_SESSION()	process_session(current)
-#else
-#define MX_SESSION()	current->signal->session
-#endif
-#else
-#define MX_SESSION()	current->session
-#endif
 
-#if (LINUX_VERSION_CODE >= VERSION_CODE(2,6,0))
 #define MX_CGRP()	process_group(current)	
+
+#ifdef VERIFY_WRITE
+#define MX_ACCESS_CHK(type, addr, size)	access_ok(type, addr, size)
 #else
-#define MX_CGRP()	current->pgrp	
+#define MX_ACCESS_CHK(type, addr, size)	access_ok(addr, size)
 #endif
 
-#if (LINUX_VERSION_CODE >= VERSION_CODE(2,6,0))
-#define MX_ACCESS_CHK(type, addr, size)	access_ok(type, addr, size)	
-#else
-#define MX_ACCESS_CHK(type, addr, size)	verify_area(type, addr, size)	
-#endif
-
-#if (LINUX_VERSION_CODE >= VERSION_CODE(2,6,0))
 #define MX_ERR(x)	!(x)	
-#else
-#define MX_ERR(x)	x	
-#endif
 
-#if (LINUX_VERSION_CODE >= VERSION_CODE(2,6,0))
 #define GET_FPAGE	__get_free_page	
-#else
-#define GET_FPAGE	get_free_page
-#endif
 
 #ifndef atomic_read
 #define atomic_read(v)	v
@@ -513,6 +445,45 @@
 
 #ifndef UCHAR
 typedef unsigned char	UCHAR;
+#endif
+
+
+#ifndef ASYNCB_SHARE_IRQ
+	#define ASYNCB_SHARE_IRQ	24
+#endif
+#ifndef ASYNC_SHARE_IRQ
+	#define ASYNC_SHARE_IRQ		(1U << ASYNCB_SHARE_IRQ)
+#endif
+#ifndef ASYNCB_CHECK_CD
+	#define ASYNCB_CHECK_CD		25
+#endif
+#ifndef ASYNC_CHECK_CD
+	#define ASYNC_CHECK_CD		(1U << ASYNCB_CHECK_CD)
+#endif
+#ifndef ASYNCB_CTS_FLOW
+	#define ASYNCB_CTS_FLOW		26
+#endif
+#ifndef ASYNC_CTS_FLOW
+	#define ASYNC_CTS_FLOW		(1U << ASYNCB_CTS_FLOW)
+#endif
+#ifndef ASYNCB_CLOSING
+	#define ASYNCB_CLOSING		27
+#endif
+#ifndef ASYNC_CLOSING
+	#define ASYNC_CLOSING		(1U << ASYNCB_CLOSING)
+#endif
+#ifndef ASYNCB_NORMAL_ACTIVE
+	#define ASYNCB_NORMAL_ACTIVE	29
+#endif
+
+#ifndef ASYNC_NORMAL_ACTIVE
+	#define ASYNC_NORMAL_ACTIVE	(1U << ASYNCB_NORMAL_ACTIVE)
+#endif
+#ifndef ASYNCB_INITIALIZED
+	#define ASYNCB_INITIALIZED	31
+#endif
+#ifndef ASYNC_INITIALIZED
+	#define ASYNC_INITIALIZED	(1U << ASYNCB_INITIALIZED)
 #endif
 
 

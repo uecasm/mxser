@@ -3,15 +3,8 @@
 
 REL=`uname -r`
 DIRS=/lib/modules/$REL/kernel/drivers/char 
-uname -a | grep 2.6 > /dev/null
-RETV=$?
-if [ $RETV -eq 0 ]; then
-	MX_MOD1=mxser.ko
-	MX_MOD2=mxupcie.ko
-else
-	MX_MOD1=mxser.o
-	MX_MOD2=mxupcie.o
-fi
+MX_MOD1=mxser.ko
+MX_MOD2=mxupcie.ko
 
 if grep mxser /proc/modules > /dev/null ; then
 	MX_LOADED1=Y
@@ -52,7 +45,7 @@ fi
 #
 # ex : interface=0x01
 # if modprobe mxupcie interface=0x01 ; then :; else
-#	exir $?
+#	exit $?
 # fi
 #
 

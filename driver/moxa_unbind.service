@@ -1,0 +1,10 @@
+[Unit]
+Description=Smartio Unbind Build-in Driver Service
+ConditionFileIsExecutable=/etc/moxa/moxa_unbind
+
+[Service]
+Type=simple
+ExecStart=/etc/moxa/moxa_unbind
+
+[Install]
+WantedBy=multi-user.target

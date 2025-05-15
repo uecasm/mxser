@@ -33,9 +33,13 @@
 #include	"cpld_param.h"
 #include 	<termios.h>
 #include 	<linux/version.h>
+#include 	<sys/ioctl.h>
+
+#include	"../global.h"
+
 #define VERSION_CODE(ver,rel,seq)   ((ver << 16) | (rel << 8) | seq)
 #define MX_IOCTL_CODE		0x400
-#define MOXA			MX_IOCTL_CODE
+//#define MOXA			MX_IOCTL_CODE
 #define MX_SET_INTERFACE	(MX_IOCTL_CODE+79)
 #define MX_GET_INTERFACE	(MX_IOCTL_CODE+80)
 #define MX_SET_TERM		(MX_IOCTL_CODE+81)
@@ -48,6 +52,12 @@
 #define SMARTIO_PUART_GET_MASTER_SLAVE  (MOXA + 88)
 #define SMARTIO_PUART_SET_DIAGNOSE      (MOXA + 89)
 #define SMARTIO_PUART_GET_ALARM		(MOXA + 90)
+
+#define SMARTIO_SET_PCI_CAPABILITY	(MOXA + 91)
+#define SMARTIO_GET_PCI_CAPABILITY	(MOXA + 92)
+
+#define MOXA_GET_MAJOR			(MOXA + 63)
+#define MOXA_GET_CUMAJOR		(MOXA + 64)
 
 
 #define MX_RS232		0x00
@@ -69,6 +79,8 @@
 #define OPT_SET_STATE		256
 #define OPT_GET_STATE		512	/* Set Pull High Resistor */
 #define OPT_SET_DIAG		1024
+#define OPT_SHOW_BOARD		2048
+#define OPT_PCI_CAP		4096
 
 static int mx_open_device(char *dev);
 static int mx_set_interface(int fd, char *dev, char *parm);
@@ -78,6 +90,10 @@ static int mx_set_auto_pnp_mode(int fd, char *dev, char *parm);
 static void mx_get_interface_term(int fd, char *dev);
 static void mx_do_diagnose(int fd, char *dev, char *parm);
 static void mx_show_help();
+static void mx_set_pci_capability(char *dev, char *parm);
+static void mx_show_board();
+static void mx_make_mxupcie_node();
+static int mx_get_mxupcie_major();
 
 int main(int argc,char *argv[])
 {
@@ -87,7 +103,7 @@ int main(int argc,char *argv[])
 	extern int optind, opterr, optopt;
 
 	opt = 0;
-	while ((c = getopt(argc, argv, "i:t:a:gh:p:d:")) != -1) {
+	while ((c = getopt(argc, argv, "i:t:a:gh:p:d:vv:")) != -1) {
 		switch (c) {
 			case 'i':
 				opt |= (OPT_OPEN | OPT_SET_INTERFACE);
@@ -126,6 +142,19 @@ int main(int argc,char *argv[])
 					parm = optarg;				
 				}
 				break;
+			case 'v':
+				if (argc != 4) {
+					if (argc == 2)
+					{
+						opt |= (OPT_SHOW_BOARD);
+					}
+					else
+						printf("muestty: Please input a parameter and board number.\n");
+				}
+				else {
+					opt |= (OPT_PCI_CAP);
+				}
+				break;
 		}
 	}
 	
@@ -151,7 +180,13 @@ int main(int argc,char *argv[])
 		mx_set_auto_pnp_mode(fd, dev, parm);
 	else if (opt & OPT_SET_DIAG)
 		mx_do_diagnose(fd, dev, parm);
-
+	else if (opt & OPT_SHOW_BOARD)
+		mx_show_board();
+	else if (opt & OPT_PCI_CAP){
+		parm = argv[2];
+		dev = argv[3];
+		mx_set_pci_capability(dev, parm);
+	}
 	close(fd);
 
 	return 0;
@@ -174,28 +209,34 @@ static int mx_open_device(char *dev)
 
 static int mx_set_interface(int fd, char *dev, char *parm)
 {
-	int mode ,ret;
+	int ret;
+	char mode;
 	
 	mode = 0;
 
-	if (strncmp(parm,"RS232",5)==0)
+	if (strncmp(parm,"RS232",5)==0 && strlen(parm)==5)
 		mode = MX_RS232;
-	else if (strncmp(parm,"RS422",5)==0)
+	else if (strncmp(parm,"RS422",5)==0 && strlen(parm)==5)
 		mode = MX_RS422;
-	else if (strncmp(parm,"RS4852W",7)==0)
+	else if (strncmp(parm,"RS4852W",7)==0 && strlen(parm)==7)
 		mode = MX_RS485_2W;
-	else if (strncmp(parm,"RS4854W",7)==0)
+	else if (strncmp(parm,"RS4854W",7)==0 && strlen(parm)==7)
 		mode = MX_RS485_4W;
 	else 	
 		mode = -1;
 
 	if (mode == -1) {
-		printf("muestty : Invaild parameter.\r\n");
+		printf("muestty : Invalid parameter. '%s' is an illegal parameter.\n", parm);
 		return -1;
 	}
 
 	if ((ret = ioctl(fd,MX_SET_INTERFACE,mode)) < 0) {
-		printf("muestty : Invaild operation of MOXA Smartio MUE series device.\n");
+		if(errno == EINVAL)
+			printf("muestty : Invalid operation, %s not support this operation.\n", dev);
+		else if(errno == EOPNOTSUPP)
+			printf("muestty : Invalid operation, %s not support this interface.\n", dev);
+		else
+			printf("muestty : Invalid operation of MOXA Smartio MUE series device.\n");
 		return -5;
 	}
 
@@ -206,9 +247,10 @@ static int mx_set_interface(int fd, char *dev, char *parm)
 
 static int mx_set_terminator(int fd, char *dev, char *parm)
 {
-	int mode, ret;
-	
-	ioctl(fd, MX_GET_INTERFACE, &mode);
+	int ret;
+	char mode;
+
+	ret = ioctl(fd, MX_GET_INTERFACE, &mode);
 	if (mode == MX_RS232) {
 		printf("muestty: Terminator cannot be set when interface is RS232 mode.\n");
 		return -1;
@@ -223,21 +265,25 @@ static int mx_set_terminator(int fd, char *dev, char *parm)
 		mode = -1;
 
 	if (mode == -1) {
-		printf("muestty : Invaild parameter.\r\n");
+		printf("muestty : Invaild parameter. '%s' is an illegal parameter.\n", parm);
 		return -1;
 	}
 
 	if ((ret = ioctl(fd, MX_SET_TERM, mode)) < 0) {
-		printf("muestty : Invaild operation of MOXA Smartio MUE series device.\n");
+		if(ret == -EINVAL)
+			printf("muestty : Invaild operation, %s not support this operation.\n", dev);
+		else
+			printf("muestty : Invaild operation of MOXA Smartio MUE series device.\n");
 		return -1;
 	}
-	printf("muestty : Set interface of %s ok.\n", dev);
+	printf("muestty : Set terminator of %s ok.\n", dev);
 	return 0;
 }
 
 static int mx_set_resistor_state(int fd, char *dev, char *parm)
 {
-	int mode, ret;
+	int ret;
+	char mode;
 	
         ioctl(fd, MX_GET_INTERFACE, &mode);
         if (mode == MX_RS232) {
@@ -252,11 +298,15 @@ static int mx_set_resistor_state(int fd, char *dev, char *parm)
 		mode = MX_CPLD_PULL_ON;
 	else {
 		printf("muestty : Invaild parameter for setting resistor state.\n");
+		printf("          '%s' is an illegal parameter.\n", parm);
 		return -1;
 	}
 
 	if ((ret = ioctl(fd, SMARTIO_PUART_SET_PULL_STATE, mode)) < 0) {
-		printf("muestty : Invaild operation of MOXA Smartio MUE series device.\n");
+		if(ret == -EINVAL)
+			printf("muestty : Invaild operation, %s not support this operation.\n", dev);
+		else
+			printf("muestty : Invaild operation of MOXA Smartio MUE series device.\n");
 		return -1;
 	}
 
@@ -267,9 +317,10 @@ static int mx_set_resistor_state(int fd, char *dev, char *parm)
 
 static int mx_set_auto_pnp_mode(int fd, char *dev, char *parm)
 {
-	int ret, terminator, hl_resistor, inter, alarm;
-	int mode, old_terminator = 0, old_hl_resistor = 0;
+	int ret, terminator, hl_resistor, alarm;
+	int old_terminator = 0, old_hl_resistor = 0;
 	int c, baud;
+	char mode, inter;
 	struct termios options;
 
 	inter = 0, terminator = 0, hl_resistor = 0;
@@ -302,6 +353,7 @@ static int mx_set_auto_pnp_mode(int fd, char *dev, char *parm)
 
 	if(baud == -1) {
 		printf("muestty : Invalid value of baud rate.\n");
+		printf("          '%s' is an illegal parameter.\n", parm);
 		return -1;
 	}
 	tcgetattr(fd, &options);
@@ -315,46 +367,70 @@ static int mx_set_auto_pnp_mode(int fd, char *dev, char *parm)
 
 	/* Save old terminator/resistor register */
 	if ((ret = ioctl(fd, MX_GET_TERM, &old_terminator)) < 0) {
-		printf("muestty : Invaild operation of MOXA Smartio MUE series device.\n");
+		if(ret == -EINVAL)
+			printf("muestty : Invaild operation, %s not support this operation.\n", dev);
+		else
+			printf("muestty : Invaild operation of MOXA Smartio MUE series device.\n");
 		return -1;
 	}
 
 	if ((ret = ioctl(fd, SMARTIO_PUART_GET_PULL_STATE, &old_hl_resistor)) < 0) {
-		printf("muestty : Invaild operation of MOXA Smartio MUE series device.\n");
+		if(ret == -EINVAL)
+			printf("muestty : Invaild operation, %s not support this operation.\n", dev);
+		else
+			printf("muestty : Invaild operation of MOXA Smartio MUE series device.\n");
 		return -1;
 	}
 	
 
 	mode = MX_TERM_NONE;
 	if ((ret = ioctl(fd, MX_SET_TERM, mode)) < 0) {
-		printf("muestty : Invaild operation of MOXA Smartio MUE series device.\n");
+		if(ret == -EINVAL)
+			printf("muestty : Invaild operation, %s not support this operation.\n", dev);
+		else
+			printf("muestty : Invaild operation of MOXA Smartio MUE series device.\n");
 		return -1;
 	}
 	mode = MX_CPLD_PULL_OFF;
 
 	if ((ret = ioctl(fd, SMARTIO_PUART_SET_PULL_STATE, mode)) < 0) {
-		printf("muestty : Invaild operation of MOXA Smartio MUE series device.\n");
+		if(ret == -EINVAL)
+			printf("muestty : Invaild operation, %s not support this operation.\n", dev);
+		else
+			printf("muestty : Invaild operation of MOXA Smartio MUE series device.\n");
 		return -1;
 	}
 
 	if ((ret = ioctl(fd, SMARTIO_PUART_SET_AUTO_MODE, MX_CPLD_AUTO_ON)) < 0) {
-		printf("muestty : Invaild operation of MOXA Smartio MUE series device.\n");
+		if(ret == -EINVAL)
+			printf("muestty : Invaild operation, %s not support this operation.\n", dev);
+		else
+			printf("muestty : Invaild operation of MOXA Smartio MUE series device.\n");
 		return -1;
 	}
 
 	sleep(2);
 
 	if ((ret = ioctl(fd, SMARTIO_PUART_SET_AUTO_MODE, MX_CPLD_AUTO_OFF)) < 0) {
-		printf("muestty : Invaild operation of MOXA Smartio MUE series device.\n");
+		if(ret == -EINVAL)
+			printf("muestty : Invaild operation, %s not support this operation.\n", dev);
+		else
+			printf("muestty : Invaild operation of MOXA Smartio MUE series device.\n");
 		return -1;
 	}
 
 	if ((ret = ioctl(fd, MX_GET_TERM, &terminator)) < 0) {
-		printf("muestty : Invaild operation of MOXA Smartio MUE series device.\n");
+		if(ret == -EINVAL)
+			printf("muestty : Invaild operation, %s not support this operation.\n", dev);
+		else
+			printf("muestty : Invaild operation of MOXA Smartio MUE series device.\n");
 		return -1;
 	}
 	if ((ret = ioctl(fd, SMARTIO_PUART_GET_PULL_STATE, &hl_resistor)) < 0) {
-		printf("muestty : Invaild operation of MOXA Smartio MUE series device.\n");
+		if(ret == -EINVAL)
+			printf("muestty : Invaild operation, %s not support this operation.\n", dev);
+		else
+			printf("muestty : Invaild operation of MOXA Smartio MUE series device.\n");
 		return -1;
 	}
 
@@ -380,19 +456,28 @@ static int mx_set_auto_pnp_mode(int fd, char *dev, char *parm)
 	mode = old_terminator;
 
 	if ((ret = ioctl(fd, MX_SET_TERM, mode)) < 0) {
-		printf("muestty : Invaild operation of MOXA Smartio MUE series device.\n");
+		if(ret == -EINVAL)
+			printf("muestty : Invaild operation, %s not support this operation.\n", dev);
+		else
+			printf("muestty : Invaild operation of MOXA Smartio MUE series device.\n");
 		return -1;
 	}
 
 	mode = old_hl_resistor;
 
 	if ((ret = ioctl(fd, SMARTIO_PUART_SET_PULL_STATE, mode)) < 0) {
-		printf("muestty : Invaild operation of MOXA Smartio MUE series device.\n");
+		if(ret == -EINVAL)
+			printf("muestty : Invaild operation, %s not support this operation.\n", dev);
+		else
+			printf("muestty : Invaild operation of MOXA Smartio MUE series device.\n");
 		return -1;
 	}
 
 	if ((ret = ioctl(fd, SMARTIO_PUART_GET_ALARM, &alarm)) < 0) {
-		printf("muestty : Invaild operation of MOXA Smartio MUE series device.\n");
+		if(ret == -EINVAL)
+			printf("muestty : Invaild operation, %s not support this operation.\n", dev);
+		else
+			printf("muestty : Invaild operation of MOXA Smartio MUE series device.\n");
 		return -1;
 	}
 
@@ -421,10 +506,16 @@ static int mx_set_auto_pnp_mode(int fd, char *dev, char *parm)
 	else {
 			// Yes => effect immediately.
 		if ((ret = ioctl(fd, SMARTIO_PUART_SET_PULL_STATE, hl_resistor)) < 0) {
-			printf("muestty : Invaild operation of MOXA Smartio MUE series device.\n");
+			if(ret == -EINVAL)
+				printf("muestty : Invaild operation, %s not support this operation.\n", dev);
+			else
+				printf("muestty : Invaild operation of MOXA Smartio MUE series device.\n");
 			return -1; 
 		}   
 		if ((ret = ioctl(fd, MX_SET_TERM, terminator)) < 0) {
+			if(ret == -EINVAL)
+				printf("muestty : Invaild operation, %s not support this operation.\n", dev);
+			else
 			printf("muestty : Invaild operation of MOXA Smartio MUE series device.\n");
 			return -1;
 		}              
@@ -436,8 +527,9 @@ static int mx_set_auto_pnp_mode(int fd, char *dev, char *parm)
 
 static void mx_do_diagnose(int fd, char *dev, char *parm)
 {
-	int ret, terminator, hl_resistor, inter, alarm;
+	int ret, terminator, hl_resistor, alarm;
 	int baud;
+	char inter;
 	struct termios options;
 
 	inter = 0, terminator = 0, hl_resistor = 0;
@@ -449,11 +541,17 @@ static void mx_do_diagnose(int fd, char *dev, char *parm)
 	}
 
 	if ((ret = ioctl(fd, MX_GET_TERM, &terminator)) < 0) {
-		printf("muestty : Invaild operation of MOXA Smartio MUE series device.\n");
+		if(ret == -EINVAL)
+			printf("muestty : Invaild operation, %s not support this operation.\n", dev);
+		else
+			printf("muestty : Invaild operation of MOXA Smartio MUE series device.\n");
 		return;
 	}
 	if ((ret = ioctl(fd, SMARTIO_PUART_GET_PULL_STATE, &hl_resistor)) < 0) {
-		printf("muestty : Invaild operation of MOXA Smartio MUE series device.\n");
+		if(ret == -EINVAL)
+			printf("muestty : Invaild operation, %s not support this operation.\n", dev);
+		else
+			printf("muestty : Invaild operation of MOXA Smartio MUE series device.\n");
 		return;
 	}
 
@@ -479,6 +577,7 @@ static void mx_do_diagnose(int fd, char *dev, char *parm)
 
 	if(baud == -1) {
 		printf("muestty : Invalid value of baud rate.\n");
+		printf("          '%s' is an illegal parameter.\n", parm);
 		return;
 	}    
 	tcgetattr(fd, &options);
@@ -492,7 +591,10 @@ static void mx_do_diagnose(int fd, char *dev, char *parm)
 
 	// turn on diagnose
 	if ((ret = ioctl(fd, SMARTIO_PUART_SET_DIAGNOSE, MX_CPLD_DIAG_ON)) < 0) {
-		printf("muestty : Invalid operation of MOXA Smartio MUE series device.\r\n");
+		if(ret == -EINVAL)
+			printf("muestty : Invaild operation, %s not support this operation.\n", dev);
+		else
+			printf("muestty : Invalid operation of MOXA Smartio MUE series device.\r\n");
 		return ;
 	}
 
@@ -550,22 +652,27 @@ static void mx_do_diagnose(int fd, char *dev, char *parm)
 	ioctl(fd, SMARTIO_PUART_SET_DIAGNOSE, MX_CPLD_DIAG_OFF);
 
         if ((ret = ioctl(fd, MX_SET_TERM, terminator)) < 0) {
-                printf("muestty : Invaild operation of MOXA Smartio MUE series device.\n");
+		if(ret == -EINVAL)
+			printf("muestty : Invaild operation, %s not support this operation.\n", dev);
+		else
+        	        printf("muestty : Invaild operation of MOXA Smartio MUE series device.\n");
                 return;
         }
 
         if ((ret = ioctl(fd, SMARTIO_PUART_SET_PULL_STATE, hl_resistor)) < 0) {
-                printf("muestty : Invaild operation of MOXA Smartio MUE series device.\n");
+		if(ret == -EINVAL)
+			printf("muestty : Invaild operation, %s not support this operation.\n", dev);
+		else
+	                printf("muestty : Invaild operation of MOXA Smartio MUE series device.\n");
                 return;
         }
 }
 
 static void mx_get_interface_term(int fd, char *dev)
 {
-	int mode ,ret, master;
+	int mode, ret;
 
 	mode = 0;
-	master = 0;
 	ioctl(fd, MX_GET_INTERFACE, &mode);
 	switch (mode) {
 		case MX_RS232:
@@ -606,24 +713,212 @@ static void mx_get_interface_term(int fd, char *dev)
 	}
 }
 
+static void mx_set_pci_capability(char *dev, char *parm)
+{
+	int fd;
+	int ret = 0;
+	struct mxupcie_pci_setting pci_setting = {0};
+
+	fd = open("/dev/mxupcie",O_RDWR);
+	if(fd < 0) {
+		if(errno == ENOENT) {
+			//try to mknod
+			mx_make_mxupcie_node();
+			fd = open("/dev/mxupcie",O_RDWR);
+			if(fd < 0) {
+				printf("muestty: Open device %s error (%d)!\n", "/dev/mxupcie",fd);
+				return;
+			}
+		}
+		else if (errno == ENXIO){
+			printf("muestty: Open device %s error, please load 'mxupcie' driver first.\n", "/dev/mxupcie");
+			return;
+		}
+		else
+		{
+			printf("muestty: Open device %s error (%d)!\n", "/dev/mxupcie",fd);
+			return;
+		}
+	}
+	
+	if(atoi(dev) > 4 || atoi(dev) <= 0)
+	{
+		printf("muestty : Invalid value of board number.\n");
+		printf("          '%s' is an illegal parameter.\n", dev);
+		close(fd);
+		return;
+	}
+	//printf("parm %s\n", parm);
+	//printf("dev %s\n", dev);
+	
+	if(atoi(parm) != 0 && atoi(parm)!=1)
+	{
+		printf("muestty : Invalid value of parameter.\n");
+		printf("          '%s' is an illegal parameter.\n", parm);
+		close(fd);
+		return;
+	}
+
+	pci_setting.whichPciBoard = atoi(dev);
+	pci_setting.cfg_value = atoi(parm);
+
+	//printf("muestty: pci_setting.whichPciBoard = %d\n", pci_setting.whichPciBoard);
+	//printf("pci_setting.cfg_value = %d\n",pci_setting.cfg_value);
+
+	ret = ioctl(fd, SMARTIO_SET_PCI_CAPABILITY, &pci_setting);
+	if(ret < 0) {
+		printf("muestty: set pci capability failed: %d\n",ret);
+		close(fd);
+		return;
+	}
+
+	close(fd);
+}
+
+static void mx_show_board()
+{
+	int fd;
+	int pcie_major, pcie_calloutmajor;
+	int ret = 0;
+	int ports;
+	int i;
+	unsigned char uchCap[MXSER_BOARDS];
+	struct mxupcie_usr_hwconf mxupciecfg[MXSER_BOARDS];
+
+	fd = open("/dev/mxupcie",O_RDWR);
+	if (fd < 0) {
+		if(errno == ENOENT) {
+			mx_make_mxupcie_node();
+			fd = open("/dev/mxupcie",O_RDWR);
+			if(fd < 0) {
+				printf("muestty: Open device %s error (%d)!\n", "/dev/mxupcie",fd);
+				return;
+			}
+		}
+		else if (errno == ENXIO){
+			printf("muestty: Open device %s error, please load 'mxupcie' driver first.\n", "/dev/mxupcie");
+			return;
+		}
+		else
+		{
+			printf("muestty: Open device %s error (%d)!\n", "/dev/mxupcie",fd);
+			return;
+		}	}
+
+	ret = ioctl(fd, MOXA_GET_CONF, mxupciecfg);
+	if (ret < 0) {
+		printf("muestty: Show board slot information failed!\n");
+		close(fd);
+		return;
+	}
+
+	ret = ioctl(fd, SMARTIO_GET_PCI_CAPABILITY, &uchCap);
+	if(ret < 0) {
+		printf("muestty: Show board slot iformation failed!\n");
+		close(fd);
+		return;
+	}
+
+	close(fd);
+	for (i = 0; i < MXSER_BOARDS; i++)
+	{
+		if(mxupciecfg[i].board_type == -1)
+			continue;
+		
+		ports = mxupcie_numports[mxupciecfg[i].board_type-1];
+		
+		if(uchCap[i] == 0)
+		{
+			printf("\nBoard [ %d ] : %s \n\tttyMUE%d-ttyMUE%d, pci_capability=Enable, BusNo=%d, DevNo=%d\n", 
+					i+1,
+					mxupcie_brdname[mxupciecfg[i].board_type-1],
+					i*MXSER_PORTS_PER_BOARD, 
+					i*MXSER_PORTS_PER_BOARD +ports - 1,
+					mxupciecfg[i].pciInfo.busNum,
+					mxupciecfg[i].pciInfo.devNum >> 3);
+		}
+		else if(uchCap[i] == 1)
+		{
+			printf("\nBoard [ %d ] : %s \n\tttyMUE%d-ttyMUE%d, pci_capability=Disable, BusNo=%d, DevNo=%d\n", 
+					i+1,
+					mxupcie_brdname[mxupciecfg[i].board_type-1],
+					i*MXSER_PORTS_PER_BOARD, 
+					i*MXSER_PORTS_PER_BOARD +ports - 1,
+					mxupciecfg[i].pciInfo.busNum,
+					mxupciecfg[i].pciInfo.devNum >> 3);
+		}
+
+	}
+}
+
+static void mx_make_mxupcie_node()
+{
+	int systemRet = 0;
+	int major = 31;
+	char cmd[1024];
+	memset(cmd, 0, sizeof(cmd));
+	systemRet = system("rm -rf /dev/mxupcie");
+	major = mx_get_mxupcie_major();
+	if(systemRet != -1) {
+		sprintf(cmd, "mknod /dev/mxupcie c %d 32", major);
+		systemRet = system(cmd);
+		if(systemRet == -1)
+			return;
+	}
+}
+
+static int mx_get_mxupcie_major()
+{
+	FILE *fstream = NULL;
+	char buff[1024];
+	int major = 31;
+	memset(buff, 0, sizeof(buff));
+
+	if(NULL == (fstream = popen("cat /proc/devices | grep -w ttyMUE | cut -c1-3 | cut -f2 -d' '","r")))
+	{
+		//fprintf(stderr, "execute command failed: %s", strerror(errno));
+
+		//get major number failed, return default major number.
+		return major;
+	}
+
+	while(NULL != fgets(buff, sizeof(buff), fstream))
+	{
+		//printf("%s", buff);
+		if(atoi(buff) >= 0){
+			major = atoi(buff);
+		}
+	}
+
+	pclose(fstream);
+	return major;
+}
+
 static void mx_show_help()
 {
-	printf("Usage: muestty <operation> device\n");
-	printf("\n");	
-	printf("device: The MUE series device node.\n");
-	printf("\n");	
-	printf("operation:	-h	  Help\n");
-	printf("		-g	  Get the following information\n"); 
-	printf("			  a) interface type\n");
-	printf("			  b) terminator resistor\n");
-	printf("			  c) pull high/low resistor\n");
-	printf("		-i intf   Set interface type\n");
-	printf("		-t value  Set terminator resistor\n");
-	printf("		-p state  Set pull high/low resistor\n");
-	printf("		-a baud   Auto tune and display the proper resistor on RS-485 2W bus\n");
-    printf("        		  under specified baud rate\n");
-	printf("		-d baud   Diagnose and display the error status when negotiation on\n");
-    printf("        		  RS-485 2W bus under specified baud rate\n");
+	printf("Usage: muestty <operation> device_node\n");
+	printf("Usage: muestty -v enable board_number\n");
+	printf("Usage: muestty -h | -v\n");
+	printf("\n");
+	printf("device_node: The MUE series device node, such as '/dev/ttyMUE0', '/dev/ttyMUE1' and so on. MUE series not include CP-118EL, CP-168EL, CP-104EL, ISA cards and PCI cards.\n");
+	printf("\n");
+	printf("board_number:The PCIe slot number, range is 1-4. You can use the operation '-v' to getthe board number and information.\n");
+	printf("\n");
+	printf("operation:	-h	        Help\n");
+	printf("		-g	        Get the following information\n"); 
+	printf("			        a) interface type\n");
+	printf("			        b) terminator resistor\n");
+	printf("			        c) pull high/low resistor\n");
+	printf("		-i intf         Set interface type\n");
+	printf("		-t value        Set terminator resistor\n");
+	printf("		-p state        Set pull high/low resistor\n");
+	printf("		-a baud         Auto tune and display the proper resistor on RS-485 2W bus\n");
+	printf("        		        under specified baud rate\n");
+	printf("		-d baud         Diagnose and display the error status when negotiation on\n");
+	printf("        		        RS-485 2W bus under specified baud rate\n");
+	printf("                -v              Show MOXA MUE series device board slot number and VM-Compatible information\n");
+	printf("                -v enable board VM-Compatible (only available for specific model)\n");
+	printf("Enable this setting to ignore PCI capability if this board has tramsmission issue on virtual machine.\n");
 	printf("\n");	
 	printf("intf 		RS232     RS-232 mode\n");
 	printf("		RS422     RS-422 mode\n");
@@ -644,4 +939,9 @@ static void mx_show_help()
 	printf("    \t\t 38400    Baud rate = 38400\n");
 	printf("    \t\t 19200    Baud rate = 19200\n");
 	printf("    \t\t  9600    Baud rate = 9600\n");
+	printf("\n");
+	printf("enable\t\t     1    Enable VM-Compatible\n");
+	printf("      \t\t     0    Disable VM-Compatible\n");
+	printf("board_number        Get by the command \"muestty -v\"\n");
+
 }
