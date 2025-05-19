@@ -10,10 +10,10 @@ Subject: Support install into $DESTDIR.
  4 files changed, 8 insertions(+), 8 deletions(-)
 
 diff --git a/utility/conf/Makefile b/utility/conf/Makefile
-index 06d9027..7f1468a 100644
+index a7b614f..c1e0bde 100644
 --- a/utility/conf/Makefile
 +++ b/utility/conf/Makefile
-@@ -5,7 +5,7 @@ FILES =  conftool.o
+@@ -5,7 +5,7 @@ FILES =  conftool.o ../global.o
  all: muestty
  
  install: muestty
@@ -22,7 +22,7 @@ index 06d9027..7f1468a 100644
  
  muestty: $(FILES)
  	@cc $(FILES) -o muestty
-@@ -18,4 +18,4 @@ clean:
+@@ -21,4 +21,4 @@ clean:
  	@rm -f muestty
  
  uninstall:
@@ -48,38 +48,38 @@ index f2f30c8..f6dd426 100644
 -	@rm -f /usr/bin/msdiag
 +	@rm -f $(DESTDIR)/usr/bin/msdiag
 diff --git a/utility/mon/Makefile b/utility/mon/Makefile
-index 1b5909f..7df9ef4 100644
+index c0f38b3..873e0cd 100644
 --- a/utility/mon/Makefile
 +++ b/utility/mon/Makefile
-@@ -12,7 +12,7 @@ endif
- all:		msmon
+@@ -17,7 +17,7 @@ endif
+ all: msmon
  
  install: msmon
 -	@cp -p msmon /usr/bin
 +	@install msmon $(DESTDIR)/usr/bin/
  
  msmon: 	$(FILES)
- 	@cc $(FILES) -o msmon
-@@ -33,4 +33,4 @@ clean:
+ ifeq ("$(LINUX_DIS)","Ubuntu") 
+@@ -52,4 +52,4 @@ clean:
  	@rm -f msmon
  
  uninstall:
 -	@rm -f /usr/bin/msmon
 +	@rm -f $(DESTDIR)/usr/bin/msmon
 diff --git a/utility/term/Makefile b/utility/term/Makefile
-index 3bd877c..a8f2b6b 100644
+index cf33c2f..de33aee 100644
 --- a/utility/term/Makefile
 +++ b/utility/term/Makefile
-@@ -12,7 +12,7 @@ endif
- all:		msterm
+@@ -18,7 +18,7 @@ endif
+ all: msterm
  
  install: msterm
 -	@cp -p msterm /usr/bin
 +	@install msterm $(DESTDIR)/usr/bin/
  
  msterm:	$(FILES)
- 	@cc $(FILES) -o msterm
-@@ -44,4 +44,4 @@ clean:
+ ifeq ("$(LINUX_DIS)","Ubuntu")
+@@ -65,4 +65,4 @@ clean:
  	@rm -f msterm
  
  uninstall:

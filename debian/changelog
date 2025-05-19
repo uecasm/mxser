@@ -1,3 +1,9 @@
+mxser (4.2-1) stable; urgency=medium
+
+  * Updated upstream driver to 4.2.
+
+ -- Gavin Lambert <debian@mirality.co.nz>  Mon, 19 May 2025 01:34:54 +0000
+
 mxser (1.16+14030317-2) stable; urgency=medium
 
   * Simplified dependencies.

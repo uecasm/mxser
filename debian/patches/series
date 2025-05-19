@@ -1,4 +1,3 @@
 01-install-destdir.patch
 02-static-patch
 03-dkms.patch
-04-irq-disabled.patch

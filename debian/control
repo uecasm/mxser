@@ -4,11 +4,11 @@
 
 Source: mxser
 Section: non-free/kernel
-Priority: extra
+Priority: optional
 Maintainer: Gavin Lambert <debian@mirality.co.nz>
 Build-Depends: debhelper (>=9), dkms, linux-libc-dev
 Standards-Version: 3.9.8
-Homepage: http://www.moxa.com/support/download.aspx?type=support&id=1122
+Homepage: https://www.moxa.com/en/support/search?psid=56230
 
 Package: mxser-dkms
 Architecture: linux-any

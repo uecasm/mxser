@@ -1,5 +1,5 @@
 From: Gavin Lambert <uecasm@users.noreply.github.com>
-Date: Wed, 12 Apr 2017 15:53:27 +1200
+Date: Mon, 19 May 2025 02:26:03 +0000
 Subject: Add Makefile for dkms package.
 
 ---
@@ -9,18 +9,18 @@ Subject: Add Makefile for dkms package.
 
 diff --git a/dkms/Makefile b/dkms/Makefile
 new file mode 100644
-index 0000000..3884a06
+index 0000000..06ce8a4
 --- /dev/null
 +++ b/dkms/Makefile
 @@ -0,0 +1,11 @@
-+KERNELRELEASE:=$(shell uname -r)
++KERNELRELEASE:=$(shell ls -r /lib/modules/ | head -n1)
 +KDIR:=/lib/modules/${KERNELRELEASE}/build
 +
-+MakeMod = -C ${KDIR} M=${CURDIR}/driver
++MakeMod = -C ${KDIR} M=${CURDIR}/driver/kernel4.x
 +
 +all:
 +	${MAKE} LVER=${KERNELRELEASE} ${MakeMod} modules
 +
 +clean:
 +	${MAKE} LVER=${KERNELRELEASE} ${MakeMod} clean
-+	${MAKE} LVER=${KERNELRELEASE} -C driver clean_local
++	${MAKE} LVER=${KERNELRELEASE} -C driver/kernel4.x clean_local
