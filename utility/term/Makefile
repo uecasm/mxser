@@ -15,7 +15,7 @@ FILES = term.o term_s.o term_m.o term_mp.o term_mf.o termvar.o recvmon.o\
 	../mxlib/mxlib.a ../mxwinlib/wlib.a 
 endif
 
-all: msterm
+all:		msterm
 
 install: msterm
 	@cp -p msterm /usr/bin
@@ -24,18 +24,22 @@ msterm:	$(FILES)
 ifeq ("$(LINUX_DIS)","Ubuntu")
 ifeq ("$(shell test $(DISTRIBUTION_VERSION_MAJOR_NUMBER) -ge 17; echo $$?)","0")
 ifeq ("$(shell test $(DISTRIBUTION_VERSION_MINOR_NUMBER) -ge 04; echo $$?)","0")
-	@cc -no-pie -static $(FILES) -o msterm
+	@cc -static $(FILES) -o msterm
 else
-	@cc -no-pie $(FILES) -o msterm
-endif
-else
-	@cc -no-pie $(FILES) -o msterm
-endif
-else
-ifeq ("$(shell gcc -v 2>&1 | grep pie)", "")
 	@cc $(FILES) -o msterm
+endif
 else
-	@cc -no-pie $(FILES) -o msterm
+	@cc $(FILES) -o msterm
+endif
+else
+ifeq ("$(LINUX_DIS)","Debian")
+	@cc -static $(FILES) -o msterm
+else
+ifeq ("$(LINUX_DIS)","Kylin")
+	@cc -static $(FILES) -o msterm
+else
+	@cc $(FILES) -o msterm
+endif
 endif
 endif
 term.o: 	term.c term.h

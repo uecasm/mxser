@@ -93,8 +93,8 @@ struct	WIN {
 typedef struct	WIN	WINDOW;
 #define 	MaxWindow	20
 #define		MaxEditMsg	5
-WINDOW		win[MaxWindow]; 	/* window struct */
-WINDOW		*wstd;			/* standard screen */
+extern WINDOW		win[MaxWindow]; 	/* window struct */
+extern WINDOW		*wstd;			/* standard screen */
 
 struct	WItem {
 	int	flag;		/* type of item; active or seperator */

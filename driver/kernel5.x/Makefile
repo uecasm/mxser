@@ -5,34 +5,11 @@ CPLD_PATH:=../CPLD/Source
 LVER:=$(shell uname -r)
 MOD_DIR:= /lib/modules/$(LVER)/kernel/drivers/char/
 EXTRA_CFLAGS  += -DOS_LINUX
-SP1 += -DRHEL8_PATCH1
 KER_DVR1_DIR:= /lib/modules/$(LVER)/kernel/drivers/tty/$(TARGET_DRIVER1).ko
 
 ##############################################################
 all: module
 install: module
-	@mkdir -p /lib/modules/$(LVER)/kernel/drivers/char/
-	$(shell [ -e $(MOD_DIR)/mxser.ko.gz ] && mv $(MOD_DIR)/mxser.ko.gz $(MOD_DIR)/mxser.ko.gz.bk)
-	@cp -f ./$(TARGET_DRIVER1).ko /lib/modules/$(LVER)/kernel/drivers/char/
-	@cp -f ./$(TARGET_DRIVER2).ko /lib/modules/$(LVER)/kernel/drivers/char/
-	@mkdir -p /lib/modules/$(LVER)/misc/
-	@cp -f ./$(TARGET_DRIVER1).ko /lib/modules/$(LVER)/misc/
-	@cp -f ./$(TARGET_DRIVER2).ko /lib/modules/$(LVER)/misc/
-ifeq ($(KER_DVR1_DIR), $(wildcard $(KER_DVR1_DIR)))
-	@mv /lib/modules/$(LVER)/kernel/drivers/tty/$(TARGET_DRIVER1).ko /lib/modules/$(LVER)/kernel/drivers/tty/$(TARGET_DRIVER1).bak
-	@depmod -a
-	@mv /lib/modules/$(LVER)/kernel/drivers/tty/$(TARGET_DRIVER1).bak /lib/modules/$(LVER)/kernel/drivers/tty/$(TARGET_DRIVER1).ko
-else
-	@depmod -a
-endif
-	@echo " "
-	@echo "**********************************************************************"
-	@echo -n " MOXA Smartio/Industio Family Multiport Board Driver "
-	@echo $(MXVER)
-	@echo " installed successfully."
-	@echo "**********************************************************************"
-
-RHEL8P1: rhel8p1
 	@mkdir -p /lib/modules/$(LVER)/kernel/drivers/char/
 	$(shell [ -e $(MOD_DIR)/mxser.ko.gz ] && mv $(MOD_DIR)/mxser.ko.gz $(MOD_DIR)/mxser.ko.gz.bk)
 	@cp -f ./$(TARGET_DRIVER1).ko /lib/modules/$(LVER)/kernel/drivers/char/
@@ -70,15 +47,6 @@ module: envchk
 	&& cp -f ./build.log ../../build.log \
 	&& exit 1
 
-rhel8p1: envchk
-	@$(MAKE) EXTRA_CFLAGS+="-DOS_LINUX -DRHEL8_PATCH1" -s -C $(KDIR) M=$(PWD) modules 2>> build.log \
-	&& cp -f ./build.log ../../build.log \
-	&& exit 0 \
-	|| echo "Build Fail! Please check build.log for further information" \
-	&& echo "and send it to support@moxa.com." \
-	&& cp -f ./build.log ../../build.log \
-	&& exit 1
-
 envchk:
 	@./mxconf | tee build.log
 
@@ -97,9 +65,13 @@ clean_local:
 	@rm -f .$(TARGET_DRIVER2)*
 	@rm -f $(TARGET_DRIVER1).ko
 	@rm -f $(TARGET_DRIVER2).ko
-	@rm -f mxser.o.ur-safe
-	@rm -f mxpcie.o.ur-safe
+	@rm -f mxpcie.dwo
+	@rm -f mxser.dwo
+	@rm -f .modules.order.cmd
+	@rm -f .Module.symvers.cmd
 	@rm -f .cache.mk
+	@rm -f mxpcie.o.ur-safe
+	@rm -f mxser.o.ur-safe
 	@rm -f mxpcie.o
 	@rm -f .mxpcie.o.cmd
 	@rm -f mxupcie.o	
@@ -111,6 +83,7 @@ clean_local:
 	@rm -f *.order
 	@rm -f ${CPLD_PATH}/*.o
 	@rm -f ${CPLD_PATH}/.cpld.o.cmd ${CPLD_PATH}/.gpio.o.cmd
+	@rm -f ${CPLD_PATH}/*.dwo
 
 clean_lib:
 	@rm -f /lib/modules/$(LVER)/kernel/drivers/char/$(TARGET_DRIVER1).ko
@@ -133,3 +106,4 @@ remove_msg:
 	@echo $(MXVER)
 	@echo " removed compeleted."
 	@echo "**********************************************************************"
+
