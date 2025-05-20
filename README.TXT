@@ -1,9 +1,9 @@
 =============================================================================
           MOXA Smartio/Industio Family Device Driver Installation Guide
-            for Linux Kernel 5.x
+            for Linux Kernel 6.x
            Copyright (C) 2022, Moxa Inc.
 =============================================================================
-Date: 07/14/2022 
+Date: 02/24/2023 
 
 Content
 
@@ -82,7 +82,7 @@ Content
 
    This driver supports x86 and x64 hardware platform. In order to maintain
    compatibility, this version has also been properly tested with several
-   Linux distribution (see version.txt). However, if compatibility problem 
+   Linux distribution (see VERSION.TXT). However, if compatibility problem 
    occurs, please contact Moxa Inc. technical support. (support@moxa.com)
 
    In addition, for the device driver, useful utilities are also provided in 
@@ -126,12 +126,12 @@ Content
    Note: The MUE series includes CP-102E, CP-102EL, CP-132EL, CP-132EL-I,
          CP-114EL, CP-114EL-I, CP-104EL-A, CP-168EL-A, CP-118EL-A,
          CP-118E-A-I, CP-138E-A, CP-134EL-A, CP-116E-A, and supports
-         linux kernel 5.x.
+         linux kernel 6.x.
 
 -----------------------------------------------------------------------------
 2. System Requirement
    - Hardware platform: x86, x64
-   - Kernel version: 5.x 
+   - Kernel version: 6.x 
    - gcc version 2.72 or later
    - Maximum 4 boards can be installed in combination
    - Kernel source
@@ -641,7 +641,24 @@ Content
 
    3.7 Verify driver installation
        You may refer to /var/log/messages to check the latest status
-       log reported by this driver whenever it's activated.
+       log reported by this driver whenever it's activated or type command
+       "dmesg" to get driver information includes model name and tty name of
+       installed UPorts.
+       
+       Following demostrates the messages when installing UPort 2210.
+       
+         mxser: MOXA Smartio/Industio family driver version 6.0
+         mxupcie: MOXA Smartio/Industio family driver version 6.0 
+         mxupcie: Found MOXA CP-116E-A series (A) board(BusNo=9,DevNo=0)
+         mxupcie:         ttyMUE0 - ttyMUE7
+         mxupcie:  max. baud rate = 921600 bps.
+         mxupcie: MOXA CPLD version 1.0
+         mxupcie: Found MOXA CP-116E-A series (B) board(BusNo=10,DevNo=0)
+         mxupcie:         ttyMUE8 - ttyMUE15
+         mxupcie:  max. baud rate = 921600 bps.
+         mxupcie: MOXA CPLD version 1.0
+
+       Above message indicates /dev/ttyMUE[0-15] are installed successfully.
        
 -----------------------------------------------------------------------------
 4. Utilities

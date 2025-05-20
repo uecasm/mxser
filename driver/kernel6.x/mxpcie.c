@@ -50,6 +50,7 @@
 #include <linux/tty_flip.h>
 #include <linux/serial.h>
 #include <linux/serial_reg.h>
+#include <linux/serial_core.h>
 #include <linux/major.h>
 #include <linux/string.h>
 #include <linux/fcntl.h>
@@ -105,12 +106,6 @@
 
 #define ENABLE_PCI_CAP	0x8001
 #define DISABLE_PCI_CAP	0x0001
-
-#if (LINUX_VERSION_CODE < VERSION_CODE(5,0,0))
-#define ACCESS_OK(x,y,z) access_ok(x,y,z)
-#else
-#define ACCESS_OK(x,y,z) access_ok(y,z)
-#endif
 
 enum	{
 	MXUPCIE_BOARD_CP102E = 1,
@@ -231,7 +226,6 @@ module_param(terminator, byte, 0);
 
 #endif /* MODULE */
 
-
 struct mxupcie_log {
 	int	tick;
 	unsigned long	rxcnt[MXUPCIE_PORTS];
@@ -339,7 +333,6 @@ struct mxupcie_mstatus{
        int  	dcd;
 };
 
-
 static  struct mxupcie_mstatus GMStatus[MXUPCIE_PORTS];
 
 static struct tty_driver	*mxvar_sdriver;
@@ -373,8 +366,11 @@ void		cleanup_module(void);
 
 static int	mxupcie_open(struct tty_struct *, struct file *);
 static void	mxupcie_close(struct tty_struct *, struct file *);
-
-static int	mxupcie_write(struct tty_struct *, const unsigned char *, int);
+#if (LINUX_VERSION_CODE < VERSION_CODE(6,6,0))
+static int      mxupcie_write(struct tty_struct *, const unsigned char *, int);
+#else
+static long int mxupcie_write(struct tty_struct *, const unsigned char *, long unsigned int);
+#endif
 static int	mxupcie_put_char(struct tty_struct *, unsigned char);
 static void	mxupcie_flush_chars(struct tty_struct *);
 #if (LINUX_VERSION_CODE < VERSION_CODE(5,14,0))
@@ -389,7 +385,11 @@ static int	mxupcie_ioctl(struct tty_struct *, uint, ulong);
 static void	mxupcie_throttle(struct tty_struct *);
 static void	mxupcie_unthrottle(struct tty_struct *);
 static void	mxupcie_set_ldisc(struct tty_struct *);
+#if(LINUX_VERSION_CODE < KERNEL_VERSION(6,1,0))
 static void	mxupcie_set_termios(struct tty_struct *, struct ktermios *);
+#else
+static void	mxupcie_set_termios(struct tty_struct *, const struct ktermios *);
+#endif
 static void	mxupcie_stop(struct tty_struct *);
 static void	mxupcie_start(struct tty_struct *);
 static void	mxupcie_hangup(struct tty_struct *);
@@ -458,6 +458,77 @@ static struct tty_operations mxupcie_ops = {
 	.wait_until_sent = mxupcie_wait_until_sent,
 };
 
+#ifdef KERNEL6_PATCH1
+struct n_tty_data {
+        /* producer-published */
+        size_t read_head;
+        size_t commit_head;
+        size_t canon_head;
+        size_t echo_head;
+        size_t echo_commit;
+        size_t echo_mark;
+        DECLARE_BITMAP(char_map, 256);
+
+        /* private to n_tty_receive_overrun (single-threaded) */
+        unsigned long overrun_time;
+        int num_overrun;
+
+        /* non-atomic */
+        bool no_room;
+
+        /* must hold exclusive termios_rwsem to reset these */
+        unsigned char lnext:1, erasing:1, raw:1, real_raw:1, icanon:1;
+        unsigned char push:1;
+
+        /* shared by producer and consumer */
+        char read_buf[N_TTY_BUF_SIZE];
+        DECLARE_BITMAP(read_flags, N_TTY_BUF_SIZE);
+        unsigned char echo_buf[N_TTY_BUF_SIZE];
+
+        /* consumer-published */
+        size_t read_tail;
+        size_t line_start;
+
+        /* # of chars looked ahead (to find software flow control chars) */
+        size_t lookahead_count;
+
+        /* protected by output lock */
+        unsigned int column;
+        unsigned int canon_column;
+        size_t echo_tail;
+
+        struct mutex atomic_read_lock;
+        struct mutex output_lock;
+};
+
+struct timer_data{
+	struct timer_list timer;
+	struct tty_struct * tty;
+};
+
+struct timer_data tmd[MXUPCIE_PORTS];
+
+static void timer_callback(struct timer_list *t)
+{
+        int ntty_cnt, space_avail;
+        struct timer_data *     tdata = from_timer(tdata, t, timer);
+        struct tty_struct *     tty = tdata->tty;
+        struct n_tty_data *     ldata = tty->disc_data;
+        struct mxupcie_struct *info = (struct mxupcie_struct *)tty->driver_data;
+
+        space_avail = tty_buffer_space_avail(&info->ttyPort);
+        ntty_cnt = ldata->read_head - ldata->read_tail;
+
+        if((info->ttyPort.buf.mem_limit - space_avail) + ntty_cnt <= LOW_WATER_UNTHROTTLE){
+                mx_startrx(tty);
+                tdata->tty = NULL;
+                del_timer(&tdata->timer);
+        } else {
+                tdata->timer.expires = jiffies + msecs_to_jiffies(RX_BUF_CHECK_MS);
+                add_timer(&tdata->timer);
+        }
+}
+#endif
 
 /*
  * The MOXA Smartio/Industio serial driver boot-time initialization code!
@@ -724,11 +795,15 @@ int mx_init(void)
 	uint8_t version, major, minor;
 	gpio_param_t cpld;
 
-#if (LINUX_VERSION_CODE >= VERSION_CODE(5,15,0))
-	mxvar_sdriver = tty_alloc_driver(MXUPCIE_PORTS + 1, 0);
-#else
-	mxvar_sdriver = alloc_tty_driver(MXUPCIE_PORTS + 1);
+#ifdef KERNEL6_PATCH1
+	for(i = 0; i < MXUPCIE_PORTS; i++) {
+		tmd[i].tty = NULL;
+		timer_setup(&tmd[i].timer, timer_callback, 0);
+	}
 #endif
+
+	mxvar_sdriver = tty_alloc_driver(MXUPCIE_PORTS + 1, 0);
+	
 	if (!mxvar_sdriver)
 		return -ENOMEM;
 	spin_lock_init(&gm_lock);
@@ -739,7 +814,9 @@ int mx_init(void)
 	pr_info("MOXA Smartio/Industio family driver version %s\n",MXUPCIE_VERSION);
 
 	/* Initialize the tty_driver structure */
+#if(LINUX_VERSION_CODE < KERNEL_VERSION(6,1,0))
 	DRV_VAR_P(magic) = TTY_DRIVER_MAGIC;
+#endif
 	DRV_VAR_P(name) = "ttyMUE";
 	DRV_VAR_P(major) = ttymajor;
 	DRV_VAR_P(minor_start) = 0;
@@ -763,11 +840,7 @@ int mx_init(void)
 	retval = tty_register_driver(DRV_VAR);
 	if(retval){
 		pr_info("Couldn't install MOXA Smartio/Industio family driver !\n");
-#if (LINUX_VERSION_CODE >= VERSION_CODE(5,15,0))
 		tty_driver_kref_put(DRV_VAR);
-#else
-		put_tty_driver(DRV_VAR);
-#endif
 		return retval;
 	}
 
@@ -987,6 +1060,10 @@ static void mxupcie_close(struct tty_struct * tty, struct file * filp)
 	unsigned char reg_flag;	
 	MX_LOCK_INIT();
 
+#ifdef KERNEL6_PATCH1
+	del_timer(&tmd[info->port].timer);
+#endif
+
 	if ( PORTNO(tty) == MXUPCIE_PORTS )
 	    return;
 
@@ -1101,9 +1178,11 @@ static void mxupcie_close(struct tty_struct * tty, struct file * filp)
 
 	MX_MOD_DEC;
 }
-
-static int mxupcie_write(struct tty_struct * tty,
-		       const unsigned char * buf, int count)
+#if (LINUX_VERSION_CODE < VERSION_CODE(6,6,0))
+static int      mxupcie_write(struct tty_struct *tty, const unsigned char *buf, int count)
+#else
+static long int mxupcie_write(struct tty_struct *tty, const unsigned char *buf, long unsigned int count)
+#endif
 {
 	int c, total = 0;
 	struct mxupcie_struct *info = (struct mxupcie_struct *)tty->driver_data;
@@ -1114,15 +1193,15 @@ static int mxupcie_write(struct tty_struct * tty,
 
 	
 	while ( 1 ) {
-		c = MIN(count, MIN(SERIAL_XMIT_SIZE - info->xmit_cnt - 1,
-			       SERIAL_XMIT_SIZE - info->xmit_head));
+		c = MIN(count, MIN(UART_XMIT_SIZE - info->xmit_cnt - 1,
+			       UART_XMIT_SIZE - info->xmit_head));
 		if ( c <= 0 ) {
 			break;
 		}
 
 			memcpy(info->xmit_buf + info->xmit_head, buf, c);
 		MX_LOCK(&info->slock);    
-		info->xmit_head = (info->xmit_head + c) & (SERIAL_XMIT_SIZE - 1);
+		info->xmit_head = (info->xmit_head + c) & (UART_XMIT_SIZE - 1);
 		info->xmit_cnt += c;
 		MX_UNLOCK(&info->slock);
 
@@ -1156,11 +1235,11 @@ static int mxupcie_put_char(struct tty_struct * tty, unsigned char ch)
 	if ( !tty || !info->xmit_buf )
 		return 0;
 
-	if ( info->xmit_cnt >= SERIAL_XMIT_SIZE - 1 )
+	if ( info->xmit_cnt >= UART_XMIT_SIZE - 1 )
 		return 0;
 	MX_LOCK(&info->slock);
 	info->xmit_buf[info->xmit_head++] = ch;
-	info->xmit_head &= SERIAL_XMIT_SIZE - 1;
+	info->xmit_head &= UART_XMIT_SIZE - 1;
 	info->xmit_cnt++;
 	MX_UNLOCK(&info->slock);
 
@@ -1215,7 +1294,7 @@ static unsigned int mxupcie_write_room(struct tty_struct *tty)
 	struct mxupcie_struct *info = (struct mxupcie_struct *)tty->driver_data;
 	int	ret;
 
-	ret = SERIAL_XMIT_SIZE - info->xmit_cnt - 1;
+	ret = UART_XMIT_SIZE - info->xmit_cnt - 1;
 
 	if ( ret < 0 )
 	    ret = 0;
@@ -1287,181 +1366,176 @@ static void mxupcie_flush_buffer(struct tty_struct * tty)
 }
 
 
-static int mxupcie_ioctl(struct tty_struct * tty, unsigned int cmd,
-		       unsigned long arg)
+static int mxupcie_ioctl(struct tty_struct *tty, unsigned int cmd, unsigned long arg)
 {
-	int			error;
-	struct mxupcie_struct *	info = (struct mxupcie_struct *)tty->driver_data;
-	struct async_icount	cprev, cnow;	    /* kernel counter temps */
-	struct serial_icounter_struct *p_cuser;     /* user space */
-	unsigned long 		templ;
-	int			ret;
-	int			port_idx = 0;
-	int baudrate;
-	gpio_param_t   cpld;
+	int error, ret, port_idx, baudrate;
+	struct mxupcie_struct *info = (struct mxupcie_struct *)tty->driver_data;
+	struct async_icount cprev, cnow;	/* kernel counter temps */
+	struct serial_icounter_struct *p_cuser;	/* user space */
+	unsigned long templ;
+	gpio_param_t cpld;
 	MX_LOCK_INIT();
+
 	port_idx = 0;
-//pr_info("%lu, mxupcie_ioctl=%x\n", jiffies, cmd);
+	// pr_info("%lu, mxupcie_ioctl=%x\n", jiffies, cmd);
 
-	if ( PORTNO(tty) == MXUPCIE_PORTS )
+	if (PORTNO(tty) == MXUPCIE_PORTS)
 		return(mx_ioctl_special(cmd, arg));
-	
-	if ( cmd == MOXA_SET_SPECIAL_BAUD_RATE || cmd == MOXA_GET_SPECIAL_BAUD_RATE || cmd == SMARTIO_SET_SPECIAL_BAUD_RATE || cmd == SMARTIO_GET_SPECIAL_BAUD_RATE ) {
-		int	speed, i;
-		if ( cmd == MOXA_SET_SPECIAL_BAUD_RATE || cmd == SMARTIO_SET_SPECIAL_BAUD_RATE ) {
-	    		error = MX_ACCESS_CHK(VERIFY_READ, (void *)arg, sizeof(int));
 
-	    		if ( MX_ERR(error) )
+	if (cmd == MOXA_SET_SPECIAL_BAUD_RATE ||
+	    cmd == MOXA_GET_SPECIAL_BAUD_RATE ||
+	    cmd == SMARTIO_SET_SPECIAL_BAUD_RATE ||
+	    cmd == SMARTIO_GET_SPECIAL_BAUD_RATE) {
+		int speed, i;
+
+		if (cmd == MOXA_SET_SPECIAL_BAUD_RATE || cmd == SMARTIO_SET_SPECIAL_BAUD_RATE) {
+			error = MX_ACCESS_CHK(VERIFY_READ, (void *)arg, sizeof(int));
+
+			if (MX_ERR(error))
 				return(error);
 
-	    		get_from_user(speed,(int *)arg);
+			get_from_user(speed,(int *)arg);
 
-			if ( speed <= 0 || speed > info->MaxCanSetBaudRate )
+			if (speed <= 0 || speed > info->MaxCanSetBaudRate)
 				return -EFAULT;
-			if ( !info->tty || !info->base )
+
+			if (!info->tty || !info->base)
 				return 0;
 
 			info->tty->termios.c_cflag &= ~(CBAUD | CBAUDEX);
 
-			for ( i=0; i<BAUD_TABLE_NO && speed != mxvar_baud_table[i]; i++ );
+			for (i = 0; i < BAUD_TABLE_NO && speed != mxvar_baud_table[i]; i++ );
 
-			if ( i == BAUD_TABLE_NO ) {
+			if (i == BAUD_TABLE_NO)
 				info->tty->termios.c_cflag |= B4000000;
-			} else {
-				switch ( mxvar_baud_table[i] ) {
-					case 921600 : info->tty->termios.c_cflag |= B921600; break;
-					case 460800 : info->tty->termios.c_cflag |= B460800; break;
-					case 230400 : info->tty->termios.c_cflag |= B230400; break;
-					case 115200 : info->tty->termios.c_cflag |= B115200; break;
-					case 57600 : info->tty->termios.c_cflag |= B57600; break;
-					case 38400 : info->tty->termios.c_cflag |= B38400; break;
-					case 19200 : info->tty->termios.c_cflag |= B19200; break;
-					case 9600 : info->tty->termios.c_cflag |= B9600; break;
-					case 4800 : info->tty->termios.c_cflag |= B4800; break;
-					case 2400 : info->tty->termios.c_cflag |= B2400; break;
-					case 1800 : info->tty->termios.c_cflag |= B1800; break;
-					case 1200 : info->tty->termios.c_cflag |= B1200; break;
-					case 600 : info->tty->termios.c_cflag |= B600; break;
-					case 300 : info->tty->termios.c_cflag |= B300; break;
-					case 200 : info->tty->termios.c_cflag |= B200; break;
-					case 150 : info->tty->termios.c_cflag |= B150; break;
-					case 134 : info->tty->termios.c_cflag |= B134; break;
-					case 110 : info->tty->termios.c_cflag |= B110; break;
-					case 75 : info->tty->termios.c_cflag |= B75; break;
-					case 50 : info->tty->termios.c_cflag |= B50; break;
+			else {
+				switch (mxvar_baud_table[i]) {
+				case 921600: info->tty->termios.c_cflag |= B921600; break;
+				case 460800: info->tty->termios.c_cflag |= B460800; break;
+				case 230400: info->tty->termios.c_cflag |= B230400; break;
+				case 115200: info->tty->termios.c_cflag |= B115200; break;
+				case 57600: info->tty->termios.c_cflag |= B57600; break;
+				case 38400: info->tty->termios.c_cflag |= B38400; break;
+				case 19200: info->tty->termios.c_cflag |= B19200; break;
+				case 9600: info->tty->termios.c_cflag |= B9600; break;
+				case 4800: info->tty->termios.c_cflag |= B4800; break;
+				case 2400: info->tty->termios.c_cflag |= B2400; break;
+				case 1800: info->tty->termios.c_cflag |= B1800; break;
+				case 1200: info->tty->termios.c_cflag |= B1200; break;
+				case 600: info->tty->termios.c_cflag |= B600; break;
+				case 300: info->tty->termios.c_cflag |= B300; break;
+				case 200: info->tty->termios.c_cflag |= B200; break;
+				case 150: info->tty->termios.c_cflag |= B150; break;
+				case 134: info->tty->termios.c_cflag |= B134; break;
+				case 110: info->tty->termios.c_cflag |= B110; break;
+				case 75: info->tty->termios.c_cflag |= B75; break;
+				case 50: info->tty->termios.c_cflag |= B50; break;
 				}
 			}
 			info->speed = speed;
-	   		MX_LOCK(&info->slock);
+			MX_LOCK(&info->slock);
 			mx_change_speed(info, 0);
-		   	MX_UNLOCK(&info->slock);
+			MX_UNLOCK(&info->slock);
 		} else {
-	    		error = MX_ACCESS_CHK(VERIFY_WRITE, (void *)arg, sizeof(int));
+			error = MX_ACCESS_CHK(VERIFY_WRITE, (void *)arg, sizeof(int));
 
-	    		if ( MX_ERR(error) )
+			if (MX_ERR(error))
 				return(error);
 
-	    		if(copy_to_user((int*)arg, &info->speed, sizeof(int)))
-			     return -EFAULT;
+			if(copy_to_user((int*)arg, &info->speed, sizeof(int)))
+				return -EFAULT;
 		}
-
 		return 0;
 	}
-
-	if ( (cmd != TIOCGSERIAL) && (cmd != TIOCMIWAIT) &&
-	     (cmd != TIOCGICOUNT) ) {
-
-		if ( tty->flags & (1 << TTY_IO_ERROR) )
+	if ((cmd != TIOCGSERIAL) && (cmd != TIOCMIWAIT) && (cmd != TIOCGICOUNT)) {
+		if (tty->flags & (1 << TTY_IO_ERROR))
 			return -EIO;
 	}
-	
-	switch ( cmd ) {
+	switch (cmd) {
 		case TIOCGSOFTCAR:
 			error = MX_ACCESS_CHK(VERIFY_WRITE, (void *)arg, sizeof(long));
 
-			if ( MX_ERR(error) )
+			if (MX_ERR(error))
 				return error;
 
 			put_to_user(C_CLOCAL(tty) ? 1 : 0, (unsigned long *)arg);
-
 			return 0;
 		case TIOCSSOFTCAR:
 			error = MX_ACCESS_CHK(VERIFY_READ, (void *)arg, sizeof(long));
 
-			if ( MX_ERR(error) )
+			if (MX_ERR(error))
 				return error;
 
-			get_from_user(templ,(unsigned long *)arg);
+			get_from_user(templ, (unsigned long *)arg);
 			arg = templ;
 			tty->termios.c_cflag = ((tty->termios.c_cflag & ~CLOCAL) | (arg ? CLOCAL : 0));
 			return 0;
 		case TIOCGSERIAL:
-			error = MX_ACCESS_CHK(VERIFY_WRITE, (void *)arg,sizeof(struct serial_struct));
+			error = MX_ACCESS_CHK(VERIFY_WRITE, (void *)arg, sizeof(struct serial_struct));
 
-			if ( MX_ERR(error) )
+			if (MX_ERR(error))
 				return error;
 
 			return mx_get_serial_info(tty, (struct serial_struct *)arg);
 		case TIOCSSERIAL:
-			error = MX_ACCESS_CHK(VERIFY_READ, (void *)arg,sizeof(struct serial_struct));
+			error = MX_ACCESS_CHK(VERIFY_READ, (void *)arg, sizeof(struct serial_struct));
 
-			if ( MX_ERR(error) )
+			if (MX_ERR(error))
 				return error;
 
 			return mx_set_serial_info(tty, (struct serial_struct *)arg);
-		case TIOCSERGETLSR: /* Get line status register */
-			error = MX_ACCESS_CHK(VERIFY_WRITE, (void *)arg,sizeof(unsigned int));
+		case TIOCSERGETLSR:	/* Get line status register */
+			error = MX_ACCESS_CHK(VERIFY_WRITE, (void *)arg, sizeof(unsigned int));
 
-			if ( MX_ERR(error) )
+			if (MX_ERR(error))
 				return error;
 			else
 				return mx_get_lsr_info(info, (unsigned int *)arg);
-	/*
-	 * Wait for any of the 4 modem inputs (DCD,RI,DSR,CTS) to change
-	 * - mask passed in arg for lines of interest
-	 *   (use |'ed TIOCM_RNG/DSR/CD/CTS for masking)
-	 * Caller should use TIOCGICOUNT to see which one it was
-	 */
-		case TIOCMIWAIT:{
+		/*
+		 * Wait for any of the 4 modem inputs (DCD, RI, DSR, CTS) to change
+		 * - mask passed in arg for lines of interest
+		 *   (use |'ed TIOCM_RNG/DSR/CD/CTS for masking)
+		 * Caller should use TIOCGICOUNT to see which one it was
+		 */
+		case TIOCMIWAIT:
 			DECLARE_WAITQUEUE(wait, current);
 			MX_LOCK(&info->slock);
-			cprev = info->icount;   /* note the counters on entry */
+			cprev = info->icount;	/* note the counters on entry */
 			MX_UNLOCK(&info->slock);
-	    
-			while ( 1 ) {
+
+			while (1) {
 			        add_wait_queue(&info->delta_msr_wait, &wait);
 				set_current_state(TASK_INTERRUPTIBLE);
 				schedule();
 			        remove_wait_queue(&info->delta_msr_wait, &wait);
 
 		                /* see if a signal did it */
-				if ( signal_pending(current))
+				if (signal_pending(current))
 					return -ERESTARTSYS;
 
 			        MX_LOCK(&info->slock);
 				cnow = info->icount;	/* atomic copy */
 				MX_UNLOCK(&info->slock);
 				
-                                if ( ((arg & TIOCM_RNG) && (cnow.rng != cprev.rng)) ||
-				     ((arg & TIOCM_DSR) && (cnow.dsr != cprev.dsr)) ||
-                                     ((arg & TIOCM_CD) && (cnow.dcd != cprev.dcd)) ||
-				     ((arg & TIOCM_CTS) && (cnow.cts != cprev.cts)) ) {
+                                if (((arg & TIOCM_RNG) && (cnow.rng != cprev.rng)) ||
+				    ((arg & TIOCM_DSR) && (cnow.dsr != cprev.dsr)) ||
+                                    ((arg & TIOCM_CD)  && (cnow.dcd != cprev.dcd)) ||
+				    ((arg & TIOCM_CTS) && (cnow.cts != cprev.cts)))
 					return 0;
-				}
+
 				cprev = cnow;
 			}
-		}
-	    /* NOTREACHED */
-	/*
-	 * Get counter of input serial line interrupts (DCD,RI,DSR,CTS)
-	 * Return: write counters to the user passed counter struct
-	 * NB: both 1->0 and 0->1 transitions are counted except for
-	 *     RI where only 0->1 is counted.
-	 */
+		/* This line would not reached */
+		/*
+		 * Get counter of input serial line interrupts (DCD, RI, DSR, CTS)
+		 * Return: write counters to the user passed counter struct
+		 * NB: both 1->0 and 0->1 transitions are counted except for
+		 * RI where only 0->1 is counted.
+		 */
 		case TIOCGICOUNT:
-			error = MX_ACCESS_CHK(VERIFY_WRITE, (void *)arg,sizeof(struct serial_icounter_struct));
+			error = MX_ACCESS_CHK(VERIFY_WRITE, (void *)arg, sizeof(struct serial_icounter_struct));
 
-			if ( MX_ERR(error) )
+			if (MX_ERR(error))
 				return error;
 
 			MX_LOCK(&info->slock);
@@ -1471,7 +1545,7 @@ static int mxupcie_ioctl(struct tty_struct * tty, unsigned int cmd,
 
 			if (put_user(cnow.frame, &p_cuser->frame))
 				return -EFAULT;
-			
+
 			if (put_user(cnow.brk, &p_cuser->brk))
 				return -EFAULT;
 
@@ -1494,32 +1568,28 @@ static int mxupcie_ioctl(struct tty_struct * tty, unsigned int cmd,
 			put_to_user(cnow.dsr, &p_cuser->dsr);
 			put_to_user(cnow.rng, &p_cuser->rng);
 			put_to_user(cnow.dcd, &p_cuser->dcd);
-
 			return 0;
-
 		case SMARTIO_PUART_SET_INTERFACE:
 			return mx_set_interface(info, (unsigned char)arg);
-
 		case SMARTIO_PUART_GET_INTERFACE:
-			if(copy_to_user((void*)arg,&info->UIR,sizeof(info->UIR)))
+			if(copy_to_user((void*)arg, &info->UIR, sizeof(info->UIR)))
 				return -EFAULT;
 
 			return 0;
-
 		case SMARTIO_PUART_SET_TERMINATOR:
 			switch (info->board_type) {
-			case MXUPCIE_BOARD_CP118E_A_I: 
-			case MXUPCIE_BOARD_CP138E_A: 
-			case MXUPCIE_BOARD_CP134EL_A: 
-			case MXUPCIE_BOARD_CP116E_A_A: 
-			case MXUPCIE_BOARD_CP116E_A_B: 
+			case MXUPCIE_BOARD_CP118E_A_I:
+			case MXUPCIE_BOARD_CP138E_A:
+			case MXUPCIE_BOARD_CP134EL_A:
+			case MXUPCIE_BOARD_CP116E_A_A:
+			case MXUPCIE_BOARD_CP116E_A_B:
 				port_idx = info->port % 8;
 				cpld.base = (unsigned char *)info->iobar3_addr;
-				MX_CPLD_LOCK( &(mxupciecfg[info->board_idx].board_lock) );
-				ret = mxCPLDSetTerminator(cpld,	port_idx, (int) arg);
-				MX_CPLD_UNLOCK( &(mxupciecfg[info->board_idx].board_lock) );
+				MX_CPLD_LOCK(&(mxupciecfg[info->board_idx].board_lock));
+				ret = mxCPLDSetTerminator(cpld,	port_idx, (int)arg);
+				MX_CPLD_UNLOCK(&(mxupciecfg[info->board_idx].board_lock));
 				return ret;
-			// CP100N series not support SW control terminator 
+			/* CP100N series not support SW control terminator */
 			case MXUPCIE_BOARD_CP102N:
 			case MXUPCIE_BOARD_CP132N:
 			case MXUPCIE_BOARD_CP112N:
@@ -1527,81 +1597,79 @@ static int mxupcie_ioctl(struct tty_struct * tty, unsigned int cmd,
 			case MXUPCIE_BOARD_CP134N:
 			case MXUPCIE_BOARD_CP114N:
 				return -EINVAL;
-			default : 
-				return mx_set_terminator(info, 
-							(unsigned char) arg);
+			default:
+				return mx_set_terminator(info, (unsigned char)arg);
 			}
 		case SMARTIO_PUART_GET_TERMINATOR:
 			switch (info->board_type) {
-			case MXUPCIE_BOARD_CP118E_A_I: 
-			case MXUPCIE_BOARD_CP138E_A: 
-			case MXUPCIE_BOARD_CP134EL_A: 
-			case MXUPCIE_BOARD_CP116E_A_A: 
-			case MXUPCIE_BOARD_CP116E_A_B: 
+			case MXUPCIE_BOARD_CP118E_A_I:
+			case MXUPCIE_BOARD_CP138E_A:
+			case MXUPCIE_BOARD_CP134EL_A:
+			case MXUPCIE_BOARD_CP116E_A_A:
+			case MXUPCIE_BOARD_CP116E_A_B:
 				port_idx = info->port % 8;
 				cpld.base = (unsigned char *)info->iobar3_addr;
-				MX_CPLD_LOCK( &(mxupciecfg[info->board_idx].board_lock) );
-				ret =  mxCPLDGetTerminator(cpld, port_idx);
-				MX_CPLD_UNLOCK( &(mxupciecfg[info->board_idx].board_lock) );
-				if (copy_to_user((void*)arg, &ret, 
-					sizeof(ret)))
+				MX_CPLD_LOCK(&(mxupciecfg[info->board_idx].board_lock));
+				ret = mxCPLDGetTerminator(cpld, port_idx);
+				MX_CPLD_UNLOCK(&(mxupciecfg[info->board_idx].board_lock));
+
+				if (copy_to_user((void*)arg, &ret, sizeof(ret)))
 					return -EFAULT;
-		
+
 				return 0;
-			default : 
-				if (copy_to_user((void*)arg,
-						&info->terminator_flag,
-						sizeof(info->terminator_flag)))
+			default:
+				if (copy_to_user((void*)arg, &info->terminator_flag, sizeof(info->terminator_flag)))
 					return -EFAULT;
+
 				return 0;
 			}
 		case SMARTIO_PUART_SET_PULL_STATE:
 			switch (info->board_type) {
-			case MXUPCIE_BOARD_CP118E_A_I: 
-			case MXUPCIE_BOARD_CP138E_A: 
-			case MXUPCIE_BOARD_CP134EL_A: 
-			case MXUPCIE_BOARD_CP116E_A_A: 
-            case MXUPCIE_BOARD_CP116E_A_B: 
+			case MXUPCIE_BOARD_CP118E_A_I:
+			case MXUPCIE_BOARD_CP138E_A:
+			case MXUPCIE_BOARD_CP134EL_A:
+			case MXUPCIE_BOARD_CP116E_A_A:
+			case MXUPCIE_BOARD_CP116E_A_B:
 				port_idx = info->port % 8;
 				cpld.base = (unsigned char *)info->iobar3_addr;
-				MX_CPLD_LOCK( &(mxupciecfg[info->board_idx].board_lock) );
+				MX_CPLD_LOCK(&(mxupciecfg[info->board_idx].board_lock));
 				ret = mxCPLDSetPullState(cpld, port_idx, (int)arg);
-				MX_CPLD_UNLOCK( &(mxupciecfg[info->board_idx].board_lock) );
+				MX_CPLD_UNLOCK(&(mxupciecfg[info->board_idx].board_lock));
 				return ret;
-			default :
-				return -EPERM; /* Other Not Supported */
-			}	
+			default:
+				return -EPERM;	/* Other Not Supported */
+			}
 		case SMARTIO_PUART_GET_PULL_STATE:
 			switch (info->board_type) {
-			case MXUPCIE_BOARD_CP118E_A_I: 
-			case MXUPCIE_BOARD_CP138E_A: 
-			case MXUPCIE_BOARD_CP134EL_A: 
-			case MXUPCIE_BOARD_CP116E_A_A: 
-            case MXUPCIE_BOARD_CP116E_A_B: 
+			case MXUPCIE_BOARD_CP118E_A_I:
+			case MXUPCIE_BOARD_CP138E_A:
+			case MXUPCIE_BOARD_CP134EL_A:
+			case MXUPCIE_BOARD_CP116E_A_A:
+			case MXUPCIE_BOARD_CP116E_A_B:
 				port_idx = info->port % 8;
 				cpld.base = (unsigned char *)info->iobar3_addr;
-				MX_CPLD_LOCK( &(mxupciecfg[info->board_idx].board_lock) );
+				MX_CPLD_LOCK(&(mxupciecfg[info->board_idx].board_lock));
 				ret = mxCPLDGetPullState(cpld, port_idx);
-				MX_CPLD_UNLOCK( &(mxupciecfg[info->board_idx].board_lock) );
-				if (copy_to_user((void*)arg, 
-						&ret, sizeof(ret)))
+				MX_CPLD_UNLOCK(&(mxupciecfg[info->board_idx].board_lock));
+
+				if (copy_to_user((void*)arg, &ret, sizeof(ret)))
 					return -EFAULT;
 
 				return 0;
-			default : 
-				return -EPERM; /* Other Not Supported */
+			default:
+				return -EPERM;	/* Other Not Supported */
 			}
 		case SMARTIO_PUART_SET_AUTO_MODE:
 			switch (info->board_type) {
-			case MXUPCIE_BOARD_CP118E_A_I: 
-			case MXUPCIE_BOARD_CP138E_A: 
-			case MXUPCIE_BOARD_CP134EL_A: 
-			case MXUPCIE_BOARD_CP116E_A_A: 
-            case MXUPCIE_BOARD_CP116E_A_B: 
+			case MXUPCIE_BOARD_CP118E_A_I:
+			case MXUPCIE_BOARD_CP138E_A:
+			case MXUPCIE_BOARD_CP134EL_A:
+			case MXUPCIE_BOARD_CP116E_A_A:
+			case MXUPCIE_BOARD_CP116E_A_B:
 				port_idx = info->port % 8;
 				cpld.base = (unsigned char *)info->iobar3_addr;
-
 				baudrate = info->speed;
+
 				if (baudrate == 921600)
 					baudrate = MX_CPLD_BAUD_921600;
 				else if (baudrate == 460800)
@@ -1619,139 +1687,141 @@ static int mxupcie_ioctl(struct tty_struct * tty, unsigned int cmd,
 				else if (baudrate == 9600)
 					baudrate = MX_CPLD_BAUD_9600;
 
-				MX_CPLD_LOCK( &(mxupciecfg[info->board_idx].board_lock) );
+				MX_CPLD_LOCK(&(mxupciecfg[info->board_idx].board_lock));
 				ret = mxCPLDSetBaudRate(cpld, port_idx, baudrate);
-				MX_CPLD_UNLOCK( &(mxupciecfg[info->board_idx].board_lock) );
+				MX_CPLD_UNLOCK(&(mxupciecfg[info->board_idx].board_lock));
+
 				if(arg == 1 && ret == MX_CPLD_ERR)
 					return -EPERM;
 
-				MX_CPLD_LOCK( &(mxupciecfg[info->board_idx].board_lock) );
+				MX_CPLD_LOCK(&(mxupciecfg[info->board_idx].board_lock));
 				ret = mxCPLDSetAutoMode(cpld, port_idx, (int)arg);
-				MX_CPLD_UNLOCK( &(mxupciecfg[info->board_idx].board_lock) );
+				MX_CPLD_UNLOCK(&(mxupciecfg[info->board_idx].board_lock));
 				return ret;
-			default : 
-				return -EPERM; /* Other Not Supported */
+			default:
+				return -EPERM;	/* Other Not Supported */
 			}
-
 		case SMARTIO_PUART_GET_AUTO_MODE:
 			switch (info->board_type) {
-			case MXUPCIE_BOARD_CP118E_A_I: 
-			case MXUPCIE_BOARD_CP138E_A: 
-			case MXUPCIE_BOARD_CP134EL_A: 
-			case MXUPCIE_BOARD_CP116E_A_A: 
-            case MXUPCIE_BOARD_CP116E_A_B: 
+			case MXUPCIE_BOARD_CP118E_A_I:
+			case MXUPCIE_BOARD_CP138E_A:
+			case MXUPCIE_BOARD_CP134EL_A:
+			case MXUPCIE_BOARD_CP116E_A_A:
+			case MXUPCIE_BOARD_CP116E_A_B:
 				port_idx = info->port % 8;
 				cpld.base = (unsigned char *)info->iobar3_addr;
-				MX_CPLD_LOCK( &(mxupciecfg[info->board_idx].board_lock) );
+				MX_CPLD_LOCK(&(mxupciecfg[info->board_idx].board_lock));
 				ret = mxCPLDGetAutoMode(cpld, port_idx);
-				MX_CPLD_UNLOCK( &(mxupciecfg[info->board_idx].board_lock) );
+				MX_CPLD_UNLOCK(&(mxupciecfg[info->board_idx].board_lock));
+
 				if (copy_to_user((void*)arg, &ret, sizeof(ret)))
 					return -EFAULT;
+
 				return 0;
-			default : 
-				return -EPERM; /* Other Not Supported */
+			default:
+				return -EPERM;	/* Other Not Supported */
 			}
 		case SMARTIO_PUART_SET_MASTER_SLAVE:
 			switch (info->board_type) {
-			case MXUPCIE_BOARD_CP118E_A_I: 
-			case MXUPCIE_BOARD_CP138E_A: 
-			case MXUPCIE_BOARD_CP134EL_A: 
-			case MXUPCIE_BOARD_CP116E_A_A: 
-            case MXUPCIE_BOARD_CP116E_A_B: 
+			case MXUPCIE_BOARD_CP118E_A_I:
+			case MXUPCIE_BOARD_CP138E_A:
+			case MXUPCIE_BOARD_CP134EL_A:
+			case MXUPCIE_BOARD_CP116E_A_A:
+			case MXUPCIE_BOARD_CP116E_A_B:
 				port_idx = info->port % 8;
 				cpld.base = (unsigned char *)info->iobar3_addr;
-                MX_CPLD_LOCK( &(mxupciecfg[info->board_idx].board_lock) ); 
+				MX_CPLD_LOCK(&(mxupciecfg[info->board_idx].board_lock));
 				ret = mxCPLDSetMasterSlave(cpld, port_idx, (int)arg);
-				MX_CPLD_UNLOCK( &(mxupciecfg[info->board_idx].board_lock) ); 
-			default : 
-				return -EPERM; /* Other Not Supported */
+				MX_CPLD_UNLOCK(&(mxupciecfg[info->board_idx].board_lock));
+				return 0;
+			default:
+				return -EPERM;	/* Other Not Supported */
 			}
 		case SMARTIO_PUART_GET_MASTER_SLAVE:
 			switch (info->board_type) {
-			case MXUPCIE_BOARD_CP118E_A_I: 
-			case MXUPCIE_BOARD_CP138E_A: 
-			case MXUPCIE_BOARD_CP134EL_A: 
-			case MXUPCIE_BOARD_CP116E_A_A: 
-            case MXUPCIE_BOARD_CP116E_A_B: 
+			case MXUPCIE_BOARD_CP118E_A_I:
+			case MXUPCIE_BOARD_CP138E_A:
+			case MXUPCIE_BOARD_CP134EL_A:
+			case MXUPCIE_BOARD_CP116E_A_A:
+			case MXUPCIE_BOARD_CP116E_A_B:
 				port_idx = info->port % 8;
 				cpld.base = (unsigned char *)info->iobar3_addr;
-				MX_CPLD_LOCK( &(mxupciecfg[info->board_idx].board_lock) );
+				MX_CPLD_LOCK(&(mxupciecfg[info->board_idx].board_lock));
 				ret = mxCPLDGetMasterSlave(cpld, port_idx);
-				MX_CPLD_UNLOCK( &(mxupciecfg[info->board_idx].board_lock) );
-				if (copy_to_user((void*)arg, 
-					&ret, sizeof(ret)))
+				MX_CPLD_UNLOCK(&(mxupciecfg[info->board_idx].board_lock));
+
+				if (copy_to_user((void*)arg, &ret, sizeof(ret)))
 					return -EFAULT;
 
 				return 0;
-			default : 
-				return -EPERM; /* Other Not Supported */
+			default:
+				return -EPERM;	/* Other Not Supported */
 			}
 		case SMARTIO_PUART_SET_DIAGNOSE:
 			switch (info->board_type) {
-			case MXUPCIE_BOARD_CP118E_A_I: 
-			case MXUPCIE_BOARD_CP138E_A: 
-			case MXUPCIE_BOARD_CP134EL_A: 
-			case MXUPCIE_BOARD_CP116E_A_A: 
-            case MXUPCIE_BOARD_CP116E_A_B: 
+			case MXUPCIE_BOARD_CP118E_A_I:
+			case MXUPCIE_BOARD_CP138E_A:
+			case MXUPCIE_BOARD_CP134EL_A:
+			case MXUPCIE_BOARD_CP116E_A_A:
+			case MXUPCIE_BOARD_CP116E_A_B:
 				port_idx = info->port % 8;
 				cpld.base = (unsigned char *)info->iobar3_addr;
-                
 				baudrate = info->speed;
-                if (baudrate == 921600)
-                    baudrate = MX_CPLD_BAUD_921600;
-                else if (baudrate == 460800)
-                    baudrate = MX_CPLD_BAUD_460800;
-                else if (baudrate == 230400)
-                    baudrate = MX_CPLD_BAUD_230400;
-                else if (baudrate == 115200)
-                    baudrate = MX_CPLD_BAUD_115200;
-                else if (baudrate == 57600)
-                    baudrate = MX_CPLD_BAUD_57600;
-                else if (baudrate == 38400)
-                    baudrate = MX_CPLD_BAUD_38400;
-                else if (baudrate == 19200)
-                    baudrate = MX_CPLD_BAUD_19200;
-                else if (baudrate == 9600)
-                    baudrate = MX_CPLD_BAUD_9600;
 
-				MX_CPLD_LOCK( &(mxupciecfg[info->board_idx].board_lock) );
+				if (baudrate == 921600)
+					baudrate = MX_CPLD_BAUD_921600;
+				else if (baudrate == 460800)
+					baudrate = MX_CPLD_BAUD_460800;
+				else if (baudrate == 230400)
+					baudrate = MX_CPLD_BAUD_230400;
+				else if (baudrate == 115200)
+					baudrate = MX_CPLD_BAUD_115200;
+				else if (baudrate == 57600)
+					baudrate = MX_CPLD_BAUD_57600;
+				else if (baudrate == 38400)
+					baudrate = MX_CPLD_BAUD_38400;
+				else if (baudrate == 19200)
+					baudrate = MX_CPLD_BAUD_19200;
+				else if (baudrate == 9600)
+					baudrate = MX_CPLD_BAUD_9600;
+
+				MX_CPLD_LOCK(&(mxupciecfg[info->board_idx].board_lock));
 				ret = mxCPLDSetBaudRate(cpld, port_idx, baudrate);
-				MX_CPLD_UNLOCK( &(mxupciecfg[info->board_idx].board_lock) );
+				MX_CPLD_UNLOCK(&(mxupciecfg[info->board_idx].board_lock));
+
 				if(arg == 1 && ret == MX_CPLD_ERR)
 					return -EPERM;
 
-				MX_CPLD_LOCK( &(mxupciecfg[info->board_idx].board_lock) );
+				MX_CPLD_LOCK(&(mxupciecfg[info->board_idx].board_lock));
 				ret = mxCPLDSetDiagnose(cpld, port_idx, (int)arg);
-				MX_CPLD_UNLOCK( &(mxupciecfg[info->board_idx].board_lock) );
+				MX_CPLD_UNLOCK(&(mxupciecfg[info->board_idx].board_lock));
 				return ret;
-			default : 
-				return -EPERM; /* Other Not Supported */
+			default:
+				return -EPERM;	/* Other Not Supported */
 			}
 		case SMARTIO_PUART_GET_ALARM:
 			switch (info->board_type) {
-			case MXUPCIE_BOARD_CP118E_A_I: 
-			case MXUPCIE_BOARD_CP138E_A: 
-			case MXUPCIE_BOARD_CP134EL_A: 
-			case MXUPCIE_BOARD_CP116E_A_A: 
-            case MXUPCIE_BOARD_CP116E_A_B: 
+			case MXUPCIE_BOARD_CP118E_A_I:
+			case MXUPCIE_BOARD_CP138E_A:
+			case MXUPCIE_BOARD_CP134EL_A:
+			case MXUPCIE_BOARD_CP116E_A_A:
+			case MXUPCIE_BOARD_CP116E_A_B:
 				port_idx = info->port % 8;
 				cpld.base = (unsigned char *)info->iobar3_addr;
-				MX_CPLD_LOCK( &(mxupciecfg[info->board_idx].board_lock) );
+				MX_CPLD_LOCK(&(mxupciecfg[info->board_idx].board_lock));
 				ret = mxCPLDGetAlarmCode(cpld, port_idx);
-				MX_CPLD_UNLOCK( &(mxupciecfg[info->board_idx].board_lock) );
-			
-				if (copy_to_user((void*)arg, 
-						&ret, sizeof(ret)))
+				MX_CPLD_UNLOCK(&(mxupciecfg[info->board_idx].board_lock));
+
+				if (copy_to_user((void*)arg, &ret, sizeof(ret)))
 					return -EFAULT;
+
 				return 0;
-			default : 
-				return -EPERM; /* Other Not Supported */
+			default:
+				return -EPERM;	/* Other Not Supported */
 			}
-
 		default:
-			return(-ENOIOCTLCMD);
+			return -ENOIOCTLCMD;
 	}
-
 	return 0;
 }
 
@@ -1762,7 +1832,7 @@ static int mx_ioctl_special(unsigned int cmd, unsigned long arg)
 
 	switch ( cmd ) {
 		case MOXA_GET_CONF:
-			error = MX_ACCESS_CHK(VERIFY_WRITE, (void *)arg,sizeof(struct mxupcie_usr_hwconf)*MXUPCIE_BOARDS);
+			error = MX_ACCESS_CHK(VERIFY_WRITE, (void *)arg, sizeof(struct mxupcie_usr_hwconf) * MXUPCIE_BOARDS);
 
 			if ( MX_ERR(error) )
 				return error;
@@ -1823,7 +1893,7 @@ static int mx_ioctl_special(unsigned int cmd, unsigned long arg)
 			return 0;
 
 		case MOXA_GETDATACOUNT:
-			error = MX_ACCESS_CHK(VERIFY_WRITE, (void *)arg,sizeof(struct mxupcie_log));
+			error = MX_ACCESS_CHK(VERIFY_WRITE, (void *)arg, sizeof(struct mxupcie_log));
 
 			if ( MX_ERR(error) )
 				return error;
@@ -1834,7 +1904,7 @@ static int mx_ioctl_special(unsigned int cmd, unsigned long arg)
 			return 0;
 
 		case MOXA_GETMSTATUS:
-			error = MX_ACCESS_CHK(VERIFY_WRITE, (void *)arg,sizeof(struct mxupcie_mstatus) * MXUPCIE_PORTS);
+			error = MX_ACCESS_CHK(VERIFY_WRITE, (void *)arg, sizeof(struct mxupcie_mstatus) * MXUPCIE_PORTS);
 
 			if ( MX_ERR(error) )
 				return error;
@@ -2134,9 +2204,13 @@ static void mxupcie_set_ldisc(struct tty_struct * tty)
 	}
 }
 
-
+#if(LINUX_VERSION_CODE < KERNEL_VERSION(6,1,0))
 static void mxupcie_set_termios(struct tty_struct * tty, 
                               struct ktermios * old_termios)
+#else
+static void mxupcie_set_termios(struct tty_struct * tty, 
+                              const struct ktermios * old_termios)
+#endif
 {
 	struct mxupcie_struct *info = (struct mxupcie_struct *)tty->driver_data;
 	MX_LOCK_INIT();
@@ -2442,10 +2516,30 @@ static void mx_receive_chars(struct mxupcie_struct *info,
 	int 			recv_room;
 	int			max = 256;
 	unsigned long 		flags;
+#ifdef KERNEL6_PATCH1
+	struct n_tty_data *	ldata = tty->disc_data;
+	int			space_avail = 0;
+	int			ntty_cnt;
+#endif
 
 	if ( *status & UART_LSR_SPECIAL )
 		goto intr_old;
 
+#ifdef KERNEL6_PATCH1
+	ntty_cnt = ldata->read_head - ldata->read_tail;
+	space_avail = tty_buffer_space_avail(&info->ttyPort);
+
+	if( (ntty_cnt + (info->ttyPort.buf.mem_limit - space_avail)) > HIGH_WATER_THROTTLE ) {
+		info->IER &= ~UART_IER_RDI;
+		MX_WRITE_REG(info->IER, info->base + UART_IER);
+
+                if(!tmd[info->port].tty) {
+                        tmd[info->port].tty = tty;
+                        tmd[info->port].timer.expires = jiffies + msecs_to_jiffies(RX_BUF_CHECK_MS);
+                        add_timer(&tmd[info->port].timer);
+                }
+	}
+#endif
 	recv_room = tty_buffer_request_room(&info->ttyPort, MX_RX_FIFO_SIZE);
 	if(recv_room){
 		gdl = MX_READ_REG(info->base + MOXA_PUART_RCNT);
@@ -2522,9 +2616,7 @@ end_intr:	// add by Victor Yu. 09-02-2002
      * we release the lock and then hold the lock again when calling tty_flip_buffer_push().
      * Otherwise, it will easily get kernel panic in real time Linux. 
      */
-    spin_unlock(&info->slock);	
 	tty_flip_buffer_push(&info->ttyPort);
-	spin_lock(&info->slock);
 
 	mxvar_log.rxcnt[info->port] += cnt;
 	info->mon_data.rxcnt += cnt;
@@ -2565,7 +2657,7 @@ static void mx_transmit_chars(struct mxupcie_struct *info)
 	tx_cnt = MX_TX_FIFO_SIZE - MX_READ_REG(info->base + MOXA_PUART_TCNT);
 
 	cnt = MIN(info->xmit_cnt, MIN(tx_cnt,
-		       SERIAL_XMIT_SIZE - info->xmit_tail));
+		       UART_XMIT_SIZE - info->xmit_tail));
 
 	if(cnt){
         int i;
@@ -2585,7 +2677,7 @@ static void mx_transmit_chars(struct mxupcie_struct *info)
 		}
 #endif
 		info->xmit_tail += cnt;
-		info->xmit_tail &= (SERIAL_XMIT_SIZE - 1);
+		info->xmit_tail &= (UART_XMIT_SIZE - 1);
 		info->xmit_cnt -= cnt;
 	}
 
@@ -2600,55 +2692,55 @@ static void mx_transmit_chars(struct mxupcie_struct *info)
 	}
 }
 
-static void mx_check_modem_status(struct mxupcie_struct *info,
-					      int status)
+static void mx_check_modem_status(struct mxupcie_struct *info, int status)
 {
 	struct tty_struct *tty = info->tty;
 	struct tty_ldisc *ld;
 
 	/* update input line counters */
-	if ( status & UART_MSR_TERI )
-	    info->icount.rng++;
-	if ( status & UART_MSR_DDSR )
-	    info->icount.dsr++;
-	if ( status & UART_MSR_DDCD ) {
-	    if ( tty ) {
-		ld = tty_ldisc_ref(tty);
-		if ( ld ) {
-		    if ( ld->ops->dcd_change )
-			    ld->ops->dcd_change(tty, ((status & UART_MSR_DCD)? TIOCM_CAR : 0));
+	if (status & UART_MSR_TERI)
+		info->icount.rng++;
+
+	if (status & UART_MSR_DDSR)
+		info->icount.dsr++;
+
+	if (status & UART_MSR_DDCD) {
+		if (tty) {
+			ld = tty_ldisc_ref(tty);
+
+			if (ld) {
+				if (ld->ops->dcd_change)
+					ld->ops->dcd_change(tty, (status & UART_MSR_DCD) ? TIOCM_CAR : 0);
+
+				tty_ldisc_deref(ld);
+			}
 		}
-		tty_ldisc_deref(ld);
-	    }
-	    info->icount.dcd++;
+		info->icount.dcd++;
 	}
-	if ( status & UART_MSR_DCTS )
-	    info->icount.cts++;
+	if (status & UART_MSR_DCTS)
+		info->icount.cts++;
 
 	info->mon_data.modem_status = status;
 	wake_up_interruptible(&info->delta_msr_wait);
 
-	if ( (info->flags & ASYNC_CHECK_CD) && (status & UART_MSR_DDCD) ) {
-		if ( status & UART_MSR_DCD )
+	if ((info->flags & ASYNC_CHECK_CD) && (status & UART_MSR_DDCD)) {
+		if (status & UART_MSR_DCD)
 			wake_up_interruptible(&info->open_wait);
-		else if ( !((info->flags & ASYNC_CALLOUT_ACTIVE) &&
-			(info->flags & ASYNC_CALLOUT_NOHUP)) )
+		else if (!((info->flags & ASYNC_CALLOUT_ACTIVE) && (info->flags & ASYNC_CALLOUT_NOHUP)))
+			set_bit(MXUPCIE_EVENT_HANGUP, &info->event);
 
-	        set_bit(MXUPCIE_EVENT_HANGUP,&info->event);
 		MXQ_TASK();
 	}
-
-	if ( info->flags & ASYNC_CTS_FLOW ) {
-		if ( info->tty->hw_stopped ) {
-			if (status & UART_MSR_CTS ){
-			    	info->tty->hw_stopped = 0;
-		       		set_bit(MXUPCIE_EVENT_TXLOW,&info->event);
-		       		MXQ_TASK();
-	        	}
-		} else {
-			if ( !(status & UART_MSR_CTS) ){
-			    	info->tty->hw_stopped = 1;
+	if (info->flags & ASYNC_CTS_FLOW) {
+		if (info->tty->hw_stopped) {
+			if (status & UART_MSR_CTS) {
+				info->tty->hw_stopped = 0;
+				set_bit(MXUPCIE_EVENT_TXLOW, &info->event);
+				MXQ_TASK();
 			}
+		} else {
+			if (!(status & UART_MSR_CTS))
+				info->tty->hw_stopped = 1;
 		}
 	}
 }

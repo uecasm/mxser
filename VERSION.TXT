@@ -1,32 +1,21 @@
-Version Number:     5.2
+Version Number:     6.1
 Product Line:       Moxa Smartio/Industio/UPCI/PCIe Family
-Platform:           x86, x64, ARM64, Linux kernel 5.x
+Platform:           x86, x64, ARM64, Linux kernel 6.x
 Company:            Moxa Inc.
-Date:               07/22/2022
+Date:               09/24/2024
 
 Supported Product:
-====================
+==================
 CP-102U, CP-102UL, CP-102UF
 CP-132U-I, CP-132UL,
-CP-132, CP-132I, CP132S, CP-132IS, 
-CI-132, CI-132I, CI-132IS, 
-(C102H, C102HI, C102HIS, C102P, CP-102, CP-102S)
 
 CP-104EL, CP-104UL, CP-104JU,
 CP-134U, CP-134U-I
-C104H/PCI, C104HS/PCI, 
-CP-114, CP-114I, CP-114S, CP-114IS, CP-114UL
-C104H, C104HS, 
-CI-104J, CI-104JS
-CI-134, CI-134I, CI-134IS, 
-(C114HI, CT-114I, C104P)
+CP-114UL
 
 CP-118EL, CP-118U, CP-118U-I,
 CP-138U, CP-138U-I
 CP-168EL, CP-168U,
-C168H/PCI,  
-C168H, C168HS, 
-(C168P)
 
 POS-104UL
 
@@ -42,6 +31,23 @@ CP-102N, CP-132N, CP-112N, CP-104N, CP-134N, CP-114N
 
 Release Note:
 =============
+Ver6.1
+New Features:
+	- Support latest Linux distributions
+		- Fedora 39 (Linux kernel 6.5)
+		- Fedora 40 (Linux kernel 6.8)
+		- Ubuntu 23.04 (Linux kernel 6.8)
+
+--------
+Ver6.0.1
+BugFix:
+	- Fix type change in write() function for Linux kernel 6.6+
+
+Ver6.0
+New Features:
+   - Divided an independent driver version 6.0 to support Linux kernel 6.x.
+
+------
 Ver5.2
 New: 
 1. Support new models CP-102N, CP-132N, CP-112N, CP-104N, CP-134N, CP-114N.

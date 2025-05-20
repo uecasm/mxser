@@ -40,6 +40,7 @@
 #include <linux/tty_flip.h>
 #include <linux/serial.h>
 #include <linux/serial_reg.h>
+#include <linux/serial_core.h>
 #include <linux/major.h>
 #include <linux/string.h>
 #include <linux/fcntl.h>
@@ -243,12 +244,6 @@
 #define	CA108_ID    	4
 #define	CA114_ID    	5
 #define	CA134I_ID    	6
-
-#if (LINUX_VERSION_CODE < VERSION_CODE(5,0,0))
-#define ACCESS_OK(x,y,z) access_ok(x,y,z)
-#else
-#define ACCESS_OK(x,y,z) access_ok(y,z)
-#endif
 
 enum	{
 	MXSER_BOARD_C168_ISA = 1,
@@ -711,8 +706,11 @@ static int      mxser_get_PCI_conf(int ,int ,int ,struct mxser_hwconf *);
 static void     mxser_do_softint(struct work_struct *work);
 static int	mxser_open(struct tty_struct *, struct file *);
 static void	mxser_close(struct tty_struct *, struct file *);
-
-static int	mxser_write(struct tty_struct *, const unsigned char *, int);
+#if (LINUX_VERSION_CODE < VERSION_CODE(6,6,0))
+static int      mxser_write(struct tty_struct *, const unsigned char *, int);
+#else
+static long int mxser_write(struct tty_struct *, const unsigned char *, long unsigned int);
+#endif
 #if (LINUX_VERSION_CODE < VERSION_CODE(5,14,0))
 static int	mxser_write_room(struct tty_struct *);
 static int	mxser_chars_in_buffer(struct tty_struct *);
@@ -729,7 +727,11 @@ static int	mxser_ioctl_special(unsigned int, unsigned long);
 static void	mxser_throttle(struct tty_struct *);
 static void	mxser_unthrottle(struct tty_struct *);
 static void	mxser_set_ldisc(struct tty_struct *);
+#if(LINUX_VERSION_CODE < KERNEL_VERSION(6,1,0))
 static void	mxser_set_termios(struct tty_struct *, struct ktermios *);
+#else
+static void	mxser_set_termios(struct tty_struct *, const struct ktermios *);
+#endif
 static void	mxser_stop(struct tty_struct *);
 static void	mxser_start(struct tty_struct *);
 static void	mxser_hangup(struct tty_struct *);
@@ -742,7 +744,11 @@ static void mxser_check_modem_status(struct mxser_struct *, int);
 static int	mxser_block_til_ready(struct tty_struct *, struct file *, struct mxser_struct *);
 static int	mxser_startup(struct mxser_struct *);
 static void	mxser_shutdown(struct mxser_struct *);
+#if(LINUX_VERSION_CODE < KERNEL_VERSION(6,1,0))
 static int	mxser_change_speed(struct mxser_struct *, struct ktermios *old_termios);
+#else
+static int	mxser_change_speed(struct mxser_struct *, const struct ktermios *old_termios);
+#endif
 static int	mxser_get_serial_info(struct tty_struct *, struct serial_struct *);
 static int	mxser_set_serial_info(struct tty_struct *, struct serial_struct *);
 static int	mxser_get_icount(struct tty_struct *tty, struct serial_icounter_struct *icount);
@@ -1074,7 +1080,9 @@ int mxser_init(void)
 	pr_info("MOXA Smartio/Industio family driver version %s\n",MXSER_VERSION);
 
 	/* Initialize the tty_driver structure */
+#if(LINUX_VERSION_CODE < KERNEL_VERSION(6,1,0))
 	DRV_VAR_P(magic) = TTY_DRIVER_MAGIC;
+#endif
 	DRV_VAR_P(name) = "ttyM";
 	DRV_VAR_P(major) = ttymajor;
 	DRV_VAR_P(minor_start) = 0;
@@ -1552,9 +1560,11 @@ static void mxser_close(struct tty_struct * tty, struct file * filp)
 	wake_up_interruptible(&info->close_wait);
 	MX_MOD_DEC;
 }
-
-static int mxser_write(struct tty_struct * tty,
-		       const unsigned char * buf, int count)
+#if (LINUX_VERSION_CODE < VERSION_CODE(6,6,0))
+static int      mxser_write(struct tty_struct *tty, const unsigned char *buf, int count)
+#else
+static long int mxser_write(struct tty_struct *tty, const unsigned char *buf, long unsigned int count)
+#endif
 {
 	int		c, total = 0;
 	struct mxser_struct *info = (struct mxser_struct *)tty->driver_data;
@@ -1564,13 +1574,13 @@ static int mxser_write(struct tty_struct * tty,
 		return(0);
 
 	while ( 1 ) {
-		c = MIN(count, MIN(SERIAL_XMIT_SIZE - info->xmit_cnt - 1,
-			SERIAL_XMIT_SIZE - info->xmit_head));
+		c = MIN(count, MIN(UART_XMIT_SIZE - info->xmit_cnt - 1,
+			UART_XMIT_SIZE - info->xmit_head));
 		if ( c <= 0 )
 			break;
 		memcpy(info->xmit_buf + info->xmit_head, buf, c);
 		MX_LOCK(&info->slock);    
-		info->xmit_head = (info->xmit_head + c) & (SERIAL_XMIT_SIZE - 1);
+		info->xmit_head = (info->xmit_head + c) & (UART_XMIT_SIZE - 1);
 		info->xmit_cnt += c;
 		MX_UNLOCK(&info->slock);
 
@@ -1592,7 +1602,7 @@ static int mxser_write(struct tty_struct * tty,
 			MX_UNLOCK(&info->slock);
 		}
 	}
-pr_info("%lu, mxser_write=%d\n", jiffies, total);
+//pr_info("%lu, mxser_write=%d\n", jiffies, total);
 	return total;
 }
 
@@ -1604,12 +1614,12 @@ static int mxser_put_char(struct tty_struct * tty, unsigned char ch)
 	if ( !tty || !info->xmit_buf )
 		return 0;
 
-	if ( info->xmit_cnt >= SERIAL_XMIT_SIZE - 1 )
+	if ( info->xmit_cnt >= UART_XMIT_SIZE - 1 )
 		return 0;
 
 	MX_LOCK(&info->slock);
 	info->xmit_buf[info->xmit_head++] = ch;
-	info->xmit_head &= SERIAL_XMIT_SIZE - 1;
+	info->xmit_head &= UART_XMIT_SIZE - 1;
 	info->xmit_cnt++;
 	MX_UNLOCK(&info->slock);
 #if (LINUX_VERSION_CODE < VERSION_CODE(5,14,0))
@@ -1665,7 +1675,7 @@ static unsigned int mxser_write_room(struct tty_struct * tty)
 	struct mxser_struct *info = (struct mxser_struct *)tty->driver_data;
 	int	ret;
 
-	ret = SERIAL_XMIT_SIZE - info->xmit_cnt - 1;
+	ret = UART_XMIT_SIZE - info->xmit_cnt - 1;
 	if ( ret < 0 )
 		ret = 0;
 	
@@ -1743,7 +1753,7 @@ static int mxser_ioctl(struct tty_struct * tty, unsigned int cmd,
 
 		p = info->port % 4;
 		if ( cmd == MOXA_SET_OP_MODE ) {
-	    		error = MX_ACCESS_CHK(VERIFY_READ, (void *)arg, sizeof(int));
+			error = MX_ACCESS_CHK(VERIFY_READ, (void *)arg, sizeof(int));
 	    		if ( MX_ERR(error) )
 				return(error);
 	    		get_from_user(opmode,(int *)arg);
@@ -1756,7 +1766,7 @@ static int mxser_ioctl(struct tty_struct * tty, unsigned int cmd,
 			val |= (opmode << shiftbit);
 			outb(val, info->opmode_ioaddr);
 		} else {
-	    		error = MX_ACCESS_CHK(VERIFY_WRITE, (void *)arg, sizeof(int));
+			error = MX_ACCESS_CHK(VERIFY_WRITE, (void *)arg, sizeof(int));
 	    		if ( MX_ERR(error) )
 				return(error);
 			shiftbit = p * 2;
@@ -1772,7 +1782,7 @@ static int mxser_ioctl(struct tty_struct * tty, unsigned int cmd,
 	if ( cmd == MOXA_SET_SPECIAL_BAUD_RATE || cmd == MOXA_GET_SPECIAL_BAUD_RATE || cmd == SMARTIO_SET_SPECIAL_BAUD_RATE || cmd == SMARTIO_GET_SPECIAL_BAUD_RATE ) {
 		int	speed, i;
 		if ( cmd == MOXA_SET_SPECIAL_BAUD_RATE || cmd == SMARTIO_SET_SPECIAL_BAUD_RATE ) {
-	    		error = MX_ACCESS_CHK(VERIFY_READ, (void *)arg, sizeof(int));
+			error = MX_ACCESS_CHK(VERIFY_READ, (void *)arg, sizeof(int));
 	    		if ( MX_ERR(error) )
 				return(error);
 
@@ -1814,7 +1824,7 @@ static int mxser_ioctl(struct tty_struct * tty, unsigned int cmd,
 			mxser_change_speed(info, 0);
 		   	MX_UNLOCK(&info->slock);
 		} else {
-	    		error = MX_ACCESS_CHK(VERIFY_WRITE, (void *)arg, sizeof(int));
+			error = MX_ACCESS_CHK(VERIFY_WRITE, (void *)arg, sizeof(int));
 	    		if ( MX_ERR(error) )
 				return(error);
 	    		if(copy_to_user((int*)arg, &info->speed, sizeof(int)))
@@ -1830,13 +1840,13 @@ static int mxser_ioctl(struct tty_struct * tty, unsigned int cmd,
 	}
 	switch ( cmd ) {
 	case TIOCGSOFTCAR:
-	    error = MX_ACCESS_CHK(VERIFY_WRITE, (void *)arg, sizeof(long));
+		error = MX_ACCESS_CHK(VERIFY_WRITE, (void *)arg, sizeof(long));
 	    if ( MX_ERR(error) )
 		return(error);
 	    put_to_user(C_CLOCAL(tty) ? 1 : 0, (unsigned long *)arg);
 	    return 0;
 	case TIOCSSOFTCAR:
-	    error = MX_ACCESS_CHK(VERIFY_READ, (void *)arg, sizeof(long));
+		error = MX_ACCESS_CHK(VERIFY_READ, (void *)arg, sizeof(long));
 	    if ( MX_ERR(error) )
 		return(error);
 	    get_from_user(templ,(unsigned long *)arg);
@@ -1845,20 +1855,17 @@ static int mxser_ioctl(struct tty_struct * tty, unsigned int cmd,
 				    (arg ? CLOCAL : 0));		
 	    return(0);
 	case TIOCGSERIAL:
-	    error = MX_ACCESS_CHK(VERIFY_WRITE, (void *)arg,
-				sizeof(struct serial_struct));
+		error = MX_ACCESS_CHK(VERIFY_WRITE, (void *)arg, sizeof(struct serial_struct));
 	    if ( MX_ERR(error) )
 		return(error);
 	    return(mxser_get_serial_info(tty, (struct serial_struct *)arg));
 	case TIOCSSERIAL:
-	    error = MX_ACCESS_CHK(VERIFY_READ, (void *)arg,
-				sizeof(struct serial_struct));
+		error = MX_ACCESS_CHK(VERIFY_READ, (void *)arg, sizeof(struct serial_struct));
 	    if ( MX_ERR(error) )
 		return(error);
 	    return(mxser_set_serial_info(tty, (struct serial_struct *)arg));
 	case TIOCSERGETLSR: /* Get line status register */
-	    error = MX_ACCESS_CHK(VERIFY_WRITE, (void *)arg,
-				sizeof(unsigned int));
+		error = MX_ACCESS_CHK(VERIFY_WRITE, (void *)arg, sizeof(unsigned int));
 	    if ( MX_ERR(error) )
 		return(error);
 	    else
@@ -1905,8 +1912,7 @@ static int mxser_ioctl(struct tty_struct * tty, unsigned int cmd,
 	 *     RI where only 0->1 is counted.
 	 */
 	case TIOCGICOUNT:
-	    error = MX_ACCESS_CHK(VERIFY_WRITE, (void *)arg,
-				sizeof(struct serial_icounter_struct));
+		error = MX_ACCESS_CHK(VERIFY_WRITE, (void *)arg, sizeof(struct serial_icounter_struct));
 	    if ( MX_ERR(error) )
 		return(error);
 	    MX_LOCK(&info->slock);
@@ -1937,7 +1943,7 @@ static int mxser_ioctl(struct tty_struct * tty, unsigned int cmd,
 /* */
 	    return(0);
 	case MOXA_HighSpeedOn:
-	    error = MX_ACCESS_CHK(VERIFY_WRITE, (void *)arg, sizeof(int));
+		error = MX_ACCESS_CHK(VERIFY_WRITE, (void *)arg, sizeof(int));
 	    if ( MX_ERR(error) )
 		return(error);
 	    put_to_user(info->baud_base != 115200 ? 1 : 0, (int *)arg);
@@ -1952,7 +1958,7 @@ static int mxser_ioctl(struct tty_struct * tty, unsigned int cmd,
     case MOXA_ASPP_SETBAUD:{
         long    baud;
 
-		error = MX_ACCESS_CHK(VERIFY_READ, (void *)arg, sizeof(long));
+	error = MX_ACCESS_CHK(VERIFY_READ, (void *)arg, sizeof(long));
 		if ( MX_ERR(error) )
     		return(error);
 		get_from_user(baud, (long *)arg);
@@ -1963,7 +1969,7 @@ static int mxser_ioctl(struct tty_struct * tty, unsigned int cmd,
         return (0);
         }
     case MOXA_ASPP_GETBAUD:
-		error = MX_ACCESS_CHK(VERIFY_WRITE, (void *)arg, sizeof(long));
+	error = MX_ACCESS_CHK(VERIFY_WRITE, (void *)arg, sizeof(long));
 		if ( MX_ERR(error) )
     		return(error);
 
@@ -1975,7 +1981,7 @@ static int mxser_ioctl(struct tty_struct * tty, unsigned int cmd,
     case MOXA_ASPP_OQUEUE:{
         int len, lsr;
 
-		error = MX_ACCESS_CHK(VERIFY_WRITE, (void *)arg, sizeof(int));
+	error = MX_ACCESS_CHK(VERIFY_WRITE, (void *)arg, sizeof(int));
 		if ( MX_ERR(error) )
     		return(error);
         len = mxser_chars_in_buffer(tty);
@@ -1991,7 +1997,7 @@ static int mxser_ioctl(struct tty_struct * tty, unsigned int cmd,
     }
     case MOXA_ASPP_MON:{
         int mcr, status;
-		error = MX_ACCESS_CHK(VERIFY_WRITE, (void *)arg, sizeof(struct mxser_mon));
+	error = MX_ACCESS_CHK(VERIFY_WRITE, (void *)arg, sizeof(struct mxser_mon));
 		if ( MX_ERR(error) )
     		return(error);
 //    	info->mon_data.ser_param = tty->termios->c_cflag;
@@ -2061,8 +2067,7 @@ static int mxser_ioctl_special(unsigned int cmd, unsigned long arg)
 
 	switch ( cmd ) {
 	case MOXA_GET_CONF:
-	    error = MX_ACCESS_CHK(VERIFY_WRITE, (void *)arg,
-			    sizeof(struct mxser_usr_hwconf)*MXSER_BOARDS);
+		error = MX_ACCESS_CHK(VERIFY_WRITE, (void *)arg, sizeof(struct mxser_usr_hwconf) * MXSER_BOARDS);
 
 	    if ( MX_ERR(error) )
 	    	return(error);
@@ -2082,7 +2087,7 @@ static int mxser_ioctl_special(unsigned int cmd, unsigned long arg)
 	    return 0;
 
         case MOXA_GET_MAJOR:
-	    error = MX_ACCESS_CHK(VERIFY_WRITE, (void *)arg, sizeof(int));
+		error = MX_ACCESS_CHK(VERIFY_WRITE, (void *)arg, sizeof(int));
 	    if ( MX_ERR(error) )
                 return(error);
 	    if(copy_to_user((int*)arg, &ttymajor, sizeof(int)))
@@ -2090,7 +2095,7 @@ static int mxser_ioctl_special(unsigned int cmd, unsigned long arg)
             return 0;
 
         case MOXA_GET_CUMAJOR:
-	    error = MX_ACCESS_CHK(VERIFY_WRITE, (void *)arg, sizeof(int));
+		error = MX_ACCESS_CHK(VERIFY_WRITE, (void *)arg, sizeof(int));
 	    if ( MX_ERR(error) )
                 return(error);
 	    if(copy_to_user((int*)arg, &calloutmajor, sizeof(int)))
@@ -2098,7 +2103,7 @@ static int mxser_ioctl_special(unsigned int cmd, unsigned long arg)
             return 0;
 
 	case MOXA_CHKPORTENABLE:
-	    error = MX_ACCESS_CHK(VERIFY_WRITE, (void *)arg, sizeof(long));
+		error = MX_ACCESS_CHK(VERIFY_WRITE, (void *)arg, sizeof(long));
 	    if ( MX_ERR(error) )
 		return(error);
 	    result = 0;
@@ -2110,8 +2115,7 @@ static int mxser_ioctl_special(unsigned int cmd, unsigned long arg)
 	    return(0);
 	case MOXA_GETDATACOUNT:
 	    //pr_info("MOXA_GETDATACOUNT\n");
-	    error = MX_ACCESS_CHK(VERIFY_WRITE, (void *)arg,
-				sizeof(struct mxser_log));
+		error = MX_ACCESS_CHK(VERIFY_WRITE, (void *)arg, sizeof(struct mxser_log));
 	    if ( MX_ERR(error) )
 		return(error);
 	    //pr_info("mxvar_log rx[0]: %d\n", mxvar_log.rxcnt[0]);
@@ -2120,8 +2124,7 @@ static int mxser_ioctl_special(unsigned int cmd, unsigned long arg)
 		return -EFAULT;
 	    return(0);
         case MOXA_GETMSTATUS:
-	    error = MX_ACCESS_CHK(VERIFY_WRITE, (void *)arg,
-				sizeof(struct mxser_mstatus) * MXSER_PORTS);
+		error = MX_ACCESS_CHK(VERIFY_WRITE, (void *)arg, sizeof(struct mxser_mstatus) * MXSER_PORTS);
 	    if ( MX_ERR(error) )
 		return(error);
 
@@ -2166,7 +2169,7 @@ static int mxser_ioctl_special(unsigned int cmd, unsigned long arg)
 		int shiftbit;
 		unsigned	cflag, iflag;
 
-		error = MX_ACCESS_CHK(VERIFY_WRITE, (void *)arg, sizeof(struct mxser_mon_ext));
+	error = MX_ACCESS_CHK(VERIFY_WRITE, (void *)arg, sizeof(struct mxser_mon_ext));
 		if ( MX_ERR(error) )
     		return(error);
 
@@ -2361,8 +2364,13 @@ static void mxser_set_ldisc(struct tty_struct * tty)
 	}
 }
 
+#if(LINUX_VERSION_CODE < KERNEL_VERSION(6,1,0))
 static void mxser_set_termios(struct tty_struct * tty, 
                               struct ktermios * old_termios)
+#else
+static void mxser_set_termios(struct tty_struct * tty, 
+                              const struct ktermios * old_termios)
+#endif
 {
 	struct mxser_struct *info = (struct mxser_struct *)tty->driver_data;
 	MX_LOCK_INIT();
@@ -2837,7 +2845,7 @@ static void mxser_transmit_chars(struct mxser_struct *info)
 //	jiffies, info->xmit_buf[info->xmit_tail]);
 
 	    outb(info->xmit_buf[info->xmit_tail++], info->base + UART_TX);
-	    info->xmit_tail = info->xmit_tail & (SERIAL_XMIT_SIZE - 1);
+	    info->xmit_tail = info->xmit_tail & (UART_XMIT_SIZE - 1);
 	    if ( --info->xmit_cnt <= 0 )
 		break;
 	} while ( --count > 0 );
@@ -2864,66 +2872,69 @@ static void mxser_transmit_chars(struct mxser_struct *info)
 	//MX_UNLOCK(&info->slock);
 }
 
-static void mxser_check_modem_status(struct mxser_struct *info,
-					      int status)
+static void mxser_check_modem_status(struct mxser_struct *info, int status)
 {
 	struct tty_struct *tty = info->tty;
 	struct tty_ldisc *ld;
 
 	/* update input line counters */
-	if ( status & UART_MSR_TERI )
-	    info->icount.rng++;
-	if ( status & UART_MSR_DDSR )
-	    info->icount.dsr++;
-	if ( status & UART_MSR_DDCD ) {
-	    if( tty ) {
-		ld = tty_ldisc_ref(tty);
-		if( ld )
-		    if( ld->ops->dcd_change )
-                        ld->ops->dcd_change(tty, ((status & UART_MSR_DCD)? TIOCM_CAR : 0));
-		tty_ldisc_deref(ld);
-	    }
-	    info->icount.dcd++;
+	if (status & UART_MSR_TERI)
+		info->icount.rng++;
+
+	if (status & UART_MSR_DDSR)
+		info->icount.dsr++;
+
+	if (status & UART_MSR_DDCD) {
+		if (tty) {
+			ld = tty_ldisc_ref(tty);
+
+			if (ld) {
+				if( ld->ops->dcd_change )
+					ld->ops->dcd_change(tty, (status & UART_MSR_DCD) ? TIOCM_CAR : 0);
+
+				tty_ldisc_deref(ld);
+			}
+		}
+		info->icount.dcd++;
 	}
-	if ( status & UART_MSR_DCTS )
-	    info->icount.cts++;
+	if (status & UART_MSR_DCTS)
+		info->icount.cts++;
+
 	info->mon_data.modem_status = status;
 	wake_up_interruptible(&info->delta_msr_wait);
-	
 
-	if ( (info->flags & ASYNC_CHECK_CD) && (status & UART_MSR_DDCD) ) {
-	    if ( status & UART_MSR_DCD )
-		wake_up_interruptible(&info->open_wait);
-	    else if ( !((info->flags & ASYNC_CALLOUT_ACTIVE) &&
-		      (info->flags & ASYNC_CALLOUT_NOHUP)) )
+	if ((info->flags & ASYNC_CHECK_CD) && (status & UART_MSR_DDCD)) {
+		if (status & UART_MSR_DCD)
+			wake_up_interruptible(&info->open_wait);
+		else if (!((info->flags & ASYNC_CALLOUT_ACTIVE) && (info->flags & ASYNC_CALLOUT_NOHUP)))
+			set_bit(MXSER_EVENT_HANGUP, &info->event);
 
-	        set_bit(MXSER_EVENT_HANGUP,&info->event);
-            MXQ_TASK();
+		MXQ_TASK();
 	}
+	if (info->flags & ASYNC_CTS_FLOW) {
+		if (info->tty->hw_stopped) {
+			if (status & UART_MSR_CTS) {
+				info->tty->hw_stopped = 0;
 
-	if ( info->flags & ASYNC_CTS_FLOW ) {
-	    if ( info->tty->hw_stopped ) {
-			if (status & UART_MSR_CTS ){
-		    	info->tty->hw_stopped = 0;
-
-		    	if ((info->type != PORT_16550A) && (!info->IsMoxaMustChipFlag)){
-					info->IER &= ~UART_IER_THRI;
-					outb(info->IER, info->base + UART_IER);
-					info->IER |= UART_IER_THRI;
-					outb(info->IER, info->base + UART_IER);
-		    	}
-	       		set_bit(MXSER_EVENT_TXLOW,&info->event);
-	       		MXQ_TASK();
-        	}
-	    } else {
-			if ( !(status & UART_MSR_CTS) ){
-		    	info->tty->hw_stopped = 1;
-		    	if ((info->type != PORT_16550A) && (!info->IsMoxaMustChipFlag)) {
-					info->IER &= ~UART_IER_THRI;
-					outb(info->IER, info->base + UART_IER);
-		    	}
+				if ((info->type != PORT_16550A) && (!info->IsMoxaMustChipFlag)) {
+						info->IER &= ~UART_IER_THRI;
+						outb(info->IER, info->base + UART_IER);
+						info->IER |= UART_IER_THRI;
+						outb(info->IER, info->base + UART_IER);
+				}
+				set_bit(MXSER_EVENT_TXLOW, &info->event);
+				MXQ_TASK();
 			}
-	    }
+		} else {
+			if (!(status & UART_MSR_CTS)) {
+				info->tty->hw_stopped = 1;
+
+				if ((info->type != PORT_16550A) && (!info->IsMoxaMustChipFlag)) {
+					info->IER &= ~UART_IER_THRI;
+					outb(info->IER, info->base + UART_IER);
+				}
+			}
+		}
 	}
 }
 
@@ -3191,8 +3202,13 @@ static void mxser_shutdown(struct mxser_struct * info)
  * This routine is called to set the UART divisor registers to match
  * the specified baud rate for a serial port.
  */
+#if(LINUX_VERSION_CODE < KERNEL_VERSION(6,1,0))
 static int mxser_change_speed(struct mxser_struct *info, 
                               struct ktermios *old_termios)
+#else
+static int mxser_change_speed(struct mxser_struct *info, 
+                              const struct ktermios *old_termios)
+#endif
 {
 	unsigned	cflag, cval, fcr;
         int             ret = 0;

@@ -327,11 +327,7 @@
 
 #define MX_TTY_DRV(x)	tty->driver->x
 
-#if (LINUX_VERSION_CODE < VERSION_CODE(5,0,0))
-#define MX_ACCESS_CHK(type, addr, size)	access_ok(type, addr, size)	
-#else
 #define MX_ACCESS_CHK(type, addr, size)	access_ok(addr, size)	
-#endif
 
 #define MX_ERR(x)	!(x)	
 
@@ -382,6 +378,12 @@ typedef unsigned char	UCHAR;
 #endif
 #ifndef ASYNC_INITIALIZED
         #define ASYNC_INITIALIZED       (1U << ASYNCB_INITIALIZED)
+#endif
+
+#ifdef KERNEL6_PATCH1
+        #define HIGH_WATER_THROTTLE     3072
+        #define LOW_WATER_UNTHROTTLE    1024
+        #define RX_BUF_CHECK_MS         10
 #endif
 
 #endif
