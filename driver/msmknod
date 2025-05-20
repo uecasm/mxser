@@ -13,8 +13,8 @@ TTYNAME1=ttyM
 TTYNAME2=ttyMUE
 
 #Callout device naming : cum[port idx]
-#CUANAME1=cum
-#CUANAME2=cumue
+CUANAME1=cum
+CUANAME2=cumue
 
 echo "MOXA Smartio Family Multiport Board Make Node Utility."
 if [ $1 ] ; then
@@ -33,27 +33,27 @@ if [ ! $MAJOR2 ] ; then
     MAJOR2=31
 fi
 echo "mxser major=" $MAJOR1
-echo "mxupcie major=" $MAJOR2
+echo "mxnpcie major=" $MAJOR2
 echo ""
 
-#if [ $2 ] ; then
-#    CUMAJOR=$2
-#else
-#    echo "Please input callout device major number for mxser(Enter for default=35):"
-#    read CUMAJOR1
-#    echo "Please input callout device major number for mxnpcie(Enter for default=34):"
-#    read CUMAJOR2
-#fi
-#
-#if [ ! $CUMAJOR1 ] ; then
-#    CUMAJOR1=35
-#fi
-#if [ ! $CUMAJOR2 ] ; then
-#    CUMAJOR2=34
-#fi
-#echo "mxser major=" $CUMAJOR1
-#echo "mxupcie major=" $CUMAJOR2
-#echo ""
+if [ $2 ] ; then
+    CUMAJOR=$2
+else
+    echo "Please input callout device major number for mxser(Enter for default=35):"
+    read CUMAJOR1
+    echo "Please input callout device major number for mxnpcie(Enter for default=34):"
+    read CUMAJOR2
+fi
+
+if [ ! $CUMAJOR1 ] ; then
+    CUMAJOR1=35
+fi
+if [ ! $CUMAJOR2 ] ; then
+    CUMAJOR2=34
+fi
+echo "mxser major=" $CUMAJOR1
+echo "mxupcie major=" $CUMAJOR2
+echo ""
 
 if [ $3 ]; then
     BOARDS=$3
@@ -99,24 +99,24 @@ do
 	id2=`expr $id2 + $port2`
 
 	[ -c /dev/$TTYNAME1$id ] && rm -f /dev/$TTYNAME1$id
-#	[ -c /dev/$CUANAME1$id ] && rm -f /dev/$CUANAME1$id
+	[ -c /dev/$CUANAME1$id ] && rm -f /dev/$CUANAME1$id
 
 	[ -c /dev/$TTYNAME2$id2 ] && rm -f /dev/$TTYNAME2$id2
-#	[ -c /dev/$CUANAME2$id2 ] && rm -f /dev/$CUANAME2$id2
+	[ -c /dev/$CUANAME2$id2 ] && rm -f /dev/$CUANAME2$id2
 
-        echo /dev/$TTYNAME1$id #/dev/$CUANAME1$id $id
+        echo /dev/$TTYNAME1$id /dev/$CUANAME1$id $id
         mknod /dev/$TTYNAME1$id c $MAJOR1 $id
-#        mknod /dev/$CUANAME1$id c $CUMAJOR1 $id
+        mknod /dev/$CUANAME1$id c $CUMAJOR1 $id
 
-        echo /dev/$TTYNAME2$id2 #/dev/$CUANAME2$id2 $id
+        echo /dev/$TTYNAME2$id2 /dev/$CUANAME2$id2 $id
         mknod /dev/$TTYNAME2$id2 c $MAJOR2 $id
-#        mknod /dev/$CUANAME2$id2 c $CUMAJOR2 $id
+        mknod /dev/$CUANAME2$id2 c $CUMAJOR2 $id
 
 	chmod a+wx /dev/$TTYNAME1$id
-#	chmod a+wx /dev/$CUANAME1$id
+	chmod a+wx /dev/$CUANAME1$id
 
 	chmod a+wx /dev/$TTYNAME2$id2
-#	chmod a+wx /dev/$CUANAME2$id2
+	chmod a+wx /dev/$CUANAME2$id2
 
         port=`expr $port + 1`
         port2=`expr $port2 + 1`

@@ -18,10 +18,10 @@
 
 #Parameters
 MX_MSB_VERSION=`awk '{if($2=="MX_SER_VERSION"){print $3}}' ../../mx_ver.h | sed s/\"//g`
-MX_RELEASE=4.20.0
-MX_VERSION=4
-MX_PATCH_LEVEL=20
-MX_SUBLEVEL=0
+MX_RELEASE=5.18.11
+MX_VERSION=5
+MX_PATCH_LEVEL=18
+MX_SUBLEVEL=11
 MX_RELEASE_DATE=`awk '{if($2=="MX_SER_DATE"){print $3}}' ../../mx_ver.h | sed s/\"//g`
 MX_VERSION_CODE=$(( ($MX_VERSION<<16)+($MX_PATCH_LEVEL<<8)+$MX_SUBLEVEL ))
 
@@ -48,7 +48,7 @@ if test  ! -e $K_SOURCE
 then
 echo "*********************************ERROR********************************"
 echo " Unable to locate matching source for kernel $K_MODULE_VERSION."
-echo " Please install proper kernel-header/source or contact support@moxa.com."
+echo " Please install proper kernel-header/source first, if you still have issue, you can contact Support@moxa.com."
 echo "**********************************************************************"
 exit 1
 fi
@@ -60,6 +60,6 @@ echo "********************************WARNING**********************************"
 echo " MOXA Smartio/Industio Family driver may not be compatible with"
 echo " Linux Kernel versions newer than $MX_RELEASE ."
 echo " To download the latest driver, please visit Moxa at: http://www.moxa.com"
-echo " If you have questions, please contact Moxa support at: support@moxa.com"
+echo " If you still have questions, you can contact Support@moxa.com"
 echo "*************************************************************************"
 fi

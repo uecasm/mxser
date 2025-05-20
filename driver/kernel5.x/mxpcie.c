@@ -106,6 +106,12 @@
 #define ENABLE_PCI_CAP	0x8001
 #define DISABLE_PCI_CAP	0x0001
 
+#if (LINUX_VERSION_CODE < VERSION_CODE(5,0,0))
+#define ACCESS_OK(x,y,z) access_ok(x,y,z)
+#else
+#define ACCESS_OK(x,y,z) access_ok(y,z)
+#endif
+
 enum	{
 	MXUPCIE_BOARD_CP102E = 1,
 	MXUPCIE_BOARD_CP102EL,
@@ -125,6 +131,7 @@ enum	{
 	MXUPCIE_BOARD_CP104N,
 	MXUPCIE_BOARD_CP134N,
 	MXUPCIE_BOARD_CP114N
+
 };
 
 static char *mxupcie_brdname[] = {
@@ -182,7 +189,7 @@ static  struct pci_device_id	mxupcie_pcibrds[] = {
         {PCI_VENDOR_ID_MOXA,PCI_DEVICE_ID_CP134EL_A ,PCI_ANY_ID, PCI_ANY_ID, 0, 0,MXUPCIE_BOARD_CP134EL_A},
         {PCI_VENDOR_ID_MOXA,PCI_DEVICE_ID_CP116E_A_A ,PCI_ANY_ID, PCI_ANY_ID, 0, 0,MXUPCIE_BOARD_CP116E_A_A},
         {PCI_VENDOR_ID_MOXA,PCI_DEVICE_ID_CP116E_A_B ,PCI_ANY_ID, PCI_ANY_ID, 0, 0,MXUPCIE_BOARD_CP116E_A_B},
-	{PCI_VENDOR_ID_MOXA,PCI_DEVICE_ID_CP102N ,PCI_ANY_ID, PCI_ANY_ID, 0, 0,MXUPCIE_BOARD_CP102N},
+        {PCI_VENDOR_ID_MOXA,PCI_DEVICE_ID_CP102N ,PCI_ANY_ID, PCI_ANY_ID, 0, 0,MXUPCIE_BOARD_CP102N},
 	{PCI_VENDOR_ID_MOXA,PCI_DEVICE_ID_CP132N ,PCI_ANY_ID, PCI_ANY_ID, 0, 0,MXUPCIE_BOARD_CP132N},
 	{PCI_VENDOR_ID_MOXA,PCI_DEVICE_ID_CP112N ,PCI_ANY_ID, PCI_ANY_ID, 0, 0,MXUPCIE_BOARD_CP112N},
 	{PCI_VENDOR_ID_MOXA,PCI_DEVICE_ID_CP104N ,PCI_ANY_ID, PCI_ANY_ID, 0, 0,MXUPCIE_BOARD_CP104N},
@@ -370,8 +377,13 @@ static void	mxupcie_close(struct tty_struct *, struct file *);
 static int	mxupcie_write(struct tty_struct *, const unsigned char *, int);
 static int	mxupcie_put_char(struct tty_struct *, unsigned char);
 static void	mxupcie_flush_chars(struct tty_struct *);
+#if (LINUX_VERSION_CODE < VERSION_CODE(5,14,0))
 static int	mxupcie_write_room(struct tty_struct *);
 static int	mxupcie_chars_in_buffer(struct tty_struct *);
+#else
+static unsigned int mxupcie_write_room(struct tty_struct *);
+static unsigned int mxupcie_chars_in_buffer(struct tty_struct *);
+#endif
 static void	mxupcie_flush_buffer(struct tty_struct *);
 static int	mxupcie_ioctl(struct tty_struct *, uint, ulong);
 static void	mxupcie_throttle(struct tty_struct *);
@@ -400,13 +412,9 @@ static int	mx_block_til_ready(struct tty_struct *, struct file *, struct mxupcie
 static int	mx_startup(struct mxupcie_struct *);
 static void	mx_shutdown(struct mxupcie_struct *);
 static int	mx_change_speed(struct mxupcie_struct *, struct ktermios *old_termios);
-#if (LINUX_VERSION_CODE >= VERSION_CODE(4,20,0)) || defined(RHEL8_PATCH1)
 static int	mx_get_serial_info(struct tty_struct *, struct serial_struct *);
 static int	mx_set_serial_info(struct tty_struct *, struct serial_struct *);
-#else
-static int	mx_get_serial_info(struct mxupcie_struct *, struct serial_struct *);
-static int	mx_set_serial_info(struct mxupcie_struct *, struct serial_struct *);
-#endif
+static int	mx_get_icount(struct tty_struct *tty, struct serial_icounter_struct *icount);
 static int	mx_get_lsr_info(struct mxupcie_struct *, unsigned int *);
 static void	mx_send_break(struct mxupcie_struct *, int);
 static int	mx_set_baud(struct mxupcie_struct *info, long newspd);
@@ -443,13 +451,13 @@ static struct tty_operations mxupcie_ops = {
 	.hangup = mxupcie_hangup,
 	.tiocmget = mxupcie_tiocmget,
 	.tiocmset = mxupcie_tiocmset,
-#if (LINUX_VERSION_CODE >= VERSION_CODE(4,20,0)) || defined(RHEL8_PATCH1)
 	.set_serial = mx_set_serial_info,
 	.get_serial = mx_get_serial_info,
-#endif
+	.get_icount = mx_get_icount,
 	.break_ctl = mxupcie_rs_break,
 	.wait_until_sent = mxupcie_wait_until_sent,
 };
+
 
 /*
  * The MOXA Smartio/Industio serial driver boot-time initialization code!
@@ -465,15 +473,14 @@ INIT_FUNC_RET	INIT_FUNC(void)
 
 CLEAR_FUNC_RET	CLEAR_FUNC(void)
 {
-	int i, err=0;
+	int i;
 	int index = 0;
 	int port_idx = 0;
 
 	struct ktermios *tp;
 	void *p;
 
-	if ((err |= tty_unregister_driver(DRV_VAR)))
-		pr_info("Couldn't unregister MOXA Smartio/Industio family serial driver\n");
+	tty_unregister_driver(DRV_VAR);
 	for (i = 0; i < DRV_VAR->num; i++) {
 		tp = DRV_VAR->termios[i];
 		if (tp) {
@@ -495,11 +502,11 @@ CLEAR_FUNC_RET	CLEAR_FUNC(void)
 		}
 		else{
 			pdev = mxupciecfg[i].pciInfo.pdev;
-			
+
 			for(index = 0; index < MXUPCIE_PORTS_PER_BOARD; index++)
 			{
 				port_idx = (i * MXUPCIE_PORTS_PER_BOARD) + index;
-				if(index >= mxupcie_numports[mxupciecfg[i].board_type - 1])
+				if(index >= mxupcie_numports[mxupciecfg[i].board_type -1])
 				{
 					continue;
 				}
@@ -507,6 +514,7 @@ CLEAR_FUNC_RET	CLEAR_FUNC(void)
 				tty_unregister_device(mxvar_sdriver, port_idx);
 				tty_port_destroy(&mxvar_table[port_idx].ttyPort);
 			}
+
 
 			free_irq(mxupciecfg[i].irq, &mxvar_table[i*MXUPCIE_PORTS_PER_BOARD]);
 
@@ -589,7 +597,7 @@ int mxupcie_initbrd(int board,struct mxupcie_hwconf *hwconf)
 			switch(info->board_type){
 				case MXUPCIE_BOARD_CP132EL:
 				case MXUPCIE_BOARD_CP138E_A:
-				case MXUPCIE_BOARD_CP134EL_A:
+				case MXUPCIE_BOARD_CP134EL_A:   
 				case MXUPCIE_BOARD_CP132N:	// mini pcie series
 				case MXUPCIE_BOARD_CP134N:	// mini pcie series
 					temp_interface = MOXA_UIR_RS422;
@@ -637,6 +645,7 @@ static void mx_getcfg(int board,struct mxupcie_hwconf *hwconf)
 {
 	mxupciecfg[board] = *hwconf;
 }
+
 
 #ifdef CONFIG_PCI
 static int mx_get_PCI_conf(int busnum,int devnum,int board_type,struct mxupcie_hwconf *hwconf)
@@ -703,7 +712,7 @@ static int mx_get_PCI_conf(int busnum,int devnum,int board_type,struct mxupcie_h
 
 int mx_init(void)
 {
-	int			i, m, retval, b;
+	int		i, m, retval, b;
 	int 		port_idx;
 #ifdef CONFIG_PCI
 	struct pci_dev	*pdev=NULL;
@@ -715,7 +724,11 @@ int mx_init(void)
 	uint8_t version, major, minor;
 	gpio_param_t cpld;
 
+#if (LINUX_VERSION_CODE >= VERSION_CODE(5,15,0))
+	mxvar_sdriver = tty_alloc_driver(MXUPCIE_PORTS + 1, 0);
+#else
 	mxvar_sdriver = alloc_tty_driver(MXUPCIE_PORTS + 1);
+#endif
 	if (!mxvar_sdriver)
 		return -ENOMEM;
 	spin_lock_init(&gm_lock);
@@ -747,17 +760,18 @@ int mx_init(void)
 	memset(&mxupcie_set_baud_method, 0, sizeof(int) * (MXUPCIE_PORTS+1));
 	memset(&hwconf, 0, sizeof(struct mxupcie_hwconf));
 
-	
-
 	retval = tty_register_driver(DRV_VAR);
 	if(retval){
 		pr_info("Couldn't install MOXA Smartio/Industio family driver !\n");
+#if (LINUX_VERSION_CODE >= VERSION_CODE(5,15,0))
+		tty_driver_kref_put(DRV_VAR);
+#else
 		put_tty_driver(DRV_VAR);
+#endif
 		return retval;
 	}
 
 	/* start finding PCI board here */
-
 #ifdef CONFIG_PCI
 	{		
 		int n = (sizeof(mxupcie_pcibrds) / sizeof(mxupcie_pcibrds[0])) - 1;
@@ -766,7 +780,7 @@ int mx_init(void)
 		m = 0;
 
 		while (b < n) {
-			pdev = pci_get_device(mxupcie_pcibrds[b].vendor,
+		       pdev = pci_get_device(mxupcie_pcibrds[b].vendor,
 		       		mxupcie_pcibrds[b].device, pdev);
 			if(pdev==NULL){
 				b++;
@@ -778,7 +792,6 @@ int mx_init(void)
 			hwconf.pciInfo.pdev = pdev;
 			pr_info("Found MOXA %s board(BusNo=%d,DevNo=%d)\n",mxupcie_brdname[(int)(mxupcie_pcibrds[b].driver_data)-1],busnum,devnum >> 3);
 			index++;
-
 
 			if ( m >= MXUPCIE_BOARDS) {
 				pr_info("Too many Smartio/Industio family boards find (maximum %d),board not configured\n",MXUPCIE_BOARDS);
@@ -806,7 +819,6 @@ int mx_init(void)
 				}
 
 				mx_getcfg(m, &hwconf);
-
 				//init mxupciecfg first, or mxupciecfg data is not correct on ISR.
 				//mxupcie_initbrd will hook ISR.
 				if(mxupcie_initbrd(m,&hwconf)<0){
@@ -814,7 +826,7 @@ int mx_init(void)
 					continue;
 				}
 
-                		switch (hwconf.board_type) {
+                switch (hwconf.board_type) {
 					case MXUPCIE_BOARD_CP118E_A_I:
 					case MXUPCIE_BOARD_CP138E_A:
 					case MXUPCIE_BOARD_CP134EL_A:
@@ -828,21 +840,20 @@ int mx_init(void)
 						break;
 				}
 
-
-		                get_pci_capability(&hwconf, &hwconf.pci_cap);
+				get_pci_capability(&hwconf, &hwconf.pci_cap);
 				//printk(">>>hwconf.pci_cap=%d\n", hwconf.pci_cap);
-
+				
 				for(index = 0; index < MXUPCIE_PORTS_PER_BOARD; index++)
 				{
-					port_idx =  (m * MXUPCIE_PORTS_PER_BOARD) + index;
+					port_idx = (m * MXUPCIE_PORTS_PER_BOARD) + index;
 					if(index >= mxupcie_numports[b])
 					{
 						continue;
 					}
 					tty_dev = tty_port_register_device(&mxvar_table[port_idx].ttyPort, mxvar_sdriver, port_idx, &pdev->dev);
-					if(IS_ERR(tty_dev)) 
+					if(IS_ERR(tty_dev))
 					{
-						pr_info("Register tty port to device failed, try to unregister...");
+						pr_info("Register tty port to device failed, try to unregister... \n");
 						retval = PTR_ERR(tty_dev);
 						for(; index > 0; index--)
 						{
@@ -853,15 +864,16 @@ int mx_init(void)
 							port_idx = (m * MXUPCIE_PORTS_PER_BOARD) + index;
 							tty_port_destroy(&mxvar_table[port_idx].ttyPort);
 						}
-						free_irq(mxupciecfg[m].irq, &mxvar_table[m*MXUPCIE_PORTS_PER_BOARD]);
+						free_irq(mxupciecfg[m].irq, &mxvar_table[m * MXUPCIE_PORTS_PER_BOARD]);
 						return retval;
 					}
 				}
+
 				m++;
 			}
 		}
 	}
-	
+
 	port_idx = MXUPCIE_BOARDS * MXUPCIE_PORTS_PER_BOARD;
 	tty_port_init(&mxvar_table[port_idx].ttyPort);
 	tty_dev = tty_port_register_device(&mxvar_table[port_idx].ttyPort, mxvar_sdriver, port_idx, NULL);
@@ -953,9 +965,11 @@ static int mxupcie_open(struct tty_struct * tty, struct file * filp)
 	clear_bit(TTY_DONT_FLIP, &tty->flags); // since VERSION_CODE >= 2.6.18
 #endif
 
+#if (LINUX_VERSION_CODE < VERSION_CODE(5,12,0))
 /* unmark here for very high baud rate (ex. 921600 bps) used
 */
 	info->ttyPort.low_latency = 0;
+#endif
 	return 0;
 }
 
@@ -1102,8 +1116,9 @@ static int mxupcie_write(struct tty_struct * tty,
 	while ( 1 ) {
 		c = MIN(count, MIN(SERIAL_XMIT_SIZE - info->xmit_cnt - 1,
 			       SERIAL_XMIT_SIZE - info->xmit_head));
-		if ( c <= 0 )
+		if ( c <= 0 ) {
 			break;
+		}
 
 			memcpy(info->xmit_buf + info->xmit_head, buf, c);
 		MX_LOCK(&info->slock);    
@@ -1115,8 +1130,11 @@ static int mxupcie_write(struct tty_struct * tty,
 		count -= c;
 		total += c;
 	}
-
+#if (LINUX_VERSION_CODE < VERSION_CODE(5,14,0))
 	if ( info->xmit_cnt && !tty->stopped ) {
+#else
+	if ( info->xmit_cnt && !tty->flow.stopped ) {
+#endif
         	    MX_LOCK(&info->slock); 	
 		    info->IER &= ~UART_IER_THRI	;
 	            MX_WRITE_REG(info->IER, info->base + UART_IER);
@@ -1126,6 +1144,7 @@ static int mxupcie_write(struct tty_struct * tty,
 	}
 	
 //pr_info("%lu, mxupcie_write=%d\n", jiffies, total);
+	
 	return total;
 }
 
@@ -1145,7 +1164,11 @@ static int mxupcie_put_char(struct tty_struct * tty, unsigned char ch)
 	info->xmit_cnt++;
 	MX_UNLOCK(&info->slock);
 
+#if (LINUX_VERSION_CODE < VERSION_CODE(5,14,0))
 	if ( !tty->stopped ) {
+#else
+	if ( !tty->flow.stopped ) {
+#endif
         	if (!tty->hw_stopped) {
         		MX_LOCK(&info->slock);
 		        info->IER &= ~UART_IER_THRI	;
@@ -1167,7 +1190,11 @@ static void mxupcie_flush_chars(struct tty_struct * tty)
 
 //pr_info("%lu, mxupcie_flush_chars\n", jiffies);
 
+#if (LINUX_VERSION_CODE < VERSION_CODE(5,14,0))
 	if ( info->xmit_cnt <= 0 || tty->stopped || !info->xmit_buf)
+#else
+	if ( info->xmit_cnt <= 0 || tty->flow.stopped || !info->xmit_buf)
+#endif
 		return;
 
 	MX_LOCK(&info->slock);
@@ -1179,7 +1206,11 @@ static void mxupcie_flush_chars(struct tty_struct * tty)
 }
 
 
+#if (LINUX_VERSION_CODE < VERSION_CODE(5,14,0))
 static int mxupcie_write_room(struct tty_struct * tty)
+#else
+static unsigned int mxupcie_write_room(struct tty_struct *tty)
+#endif
 {
 	struct mxupcie_struct *info = (struct mxupcie_struct *)tty->driver_data;
 	int	ret;
@@ -1188,12 +1219,15 @@ static int mxupcie_write_room(struct tty_struct * tty)
 
 	if ( ret < 0 )
 	    ret = 0;
-    
+	    
 	return ret;
 }
 
-
+#if (LINUX_VERSION_CODE < VERSION_CODE(5,14,0))
 static int mxupcie_chars_in_buffer(struct tty_struct * tty)
+#else
+static unsigned int mxupcie_chars_in_buffer(struct tty_struct * tty)
+#endif
 {
 	int len;
 	struct mxupcie_struct *info = (struct mxupcie_struct *)tty->driver_data;
@@ -1235,7 +1269,7 @@ static void mxupcie_flush_buffer(struct tty_struct * tty)
 	//
 	// It is advised to reset 5 times or much more.
 	//
-	MX_WRITE_REG(0, info->base + UART_IER);
+	MX_WRITE_REG(0, info->base +UART_IER);
 	mx_set_baud(info, 0);
 	fcr = MX_READ_REG(info->base + UART_FCR);
 	for (i = 0; i < 5; i++) {
@@ -1258,7 +1292,6 @@ static int mxupcie_ioctl(struct tty_struct * tty, unsigned int cmd,
 {
 	int			error;
 	struct mxupcie_struct *	info = (struct mxupcie_struct *)tty->driver_data;
-	int			retval;
 	struct async_icount	cprev, cnow;	    /* kernel counter temps */
 	struct serial_icounter_struct *p_cuser;     /* user space */
 	unsigned long 		templ;
@@ -1343,28 +1376,6 @@ static int mxupcie_ioctl(struct tty_struct * tty, unsigned int cmd,
 	}
 	
 	switch ( cmd ) {
-		case TCSBRK:	/* SVID version: non-zero arg --> no break */
-			retval = tty_check_change(tty);
-
-			if ( retval )
-				return retval;
-
-			tty_wait_until_sent(tty, 0);
-
-			if ( !arg )
-				mx_send_break(info, HZ/4);		/* 1/4 second */
-
-			return 0;
-		case TCSBRKP:	/* support for POSIX tcsendbreak() */
-			retval = tty_check_change(tty);
-
-			if ( retval )
-				return retval;
-
-			tty_wait_until_sent(tty, 0);
-			mx_send_break(info, arg ? arg*(HZ/10) : HZ/4);
-
-			return 0;
 		case TIOCGSOFTCAR:
 			error = MX_ACCESS_CHK(VERIFY_WRITE, (void *)arg, sizeof(long));
 
@@ -1389,21 +1400,15 @@ static int mxupcie_ioctl(struct tty_struct * tty, unsigned int cmd,
 
 			if ( MX_ERR(error) )
 				return error;
-#if (LINUX_VERSION_CODE >= VERSION_CODE(4,20,0)) || defined(RHEL8_PATCH1)
+
 			return mx_get_serial_info(tty, (struct serial_struct *)arg);
-#else
-			return mx_get_serial_info(info, (struct serial_struct *)arg);
-#endif
 		case TIOCSSERIAL:
 			error = MX_ACCESS_CHK(VERIFY_READ, (void *)arg,sizeof(struct serial_struct));
 
 			if ( MX_ERR(error) )
 				return error;
-#if (LINUX_VERSION_CODE >= VERSION_CODE(4,20,0)) || defined(RHEL8_PATCH1)
+
 			return mx_set_serial_info(tty, (struct serial_struct *)arg);
-#else
-			return mx_set_serial_info(info, (struct serial_struct *)arg);
-#endif
 		case TIOCSERGETLSR: /* Get line status register */
 			error = MX_ACCESS_CHK(VERIFY_WRITE, (void *)arg,sizeof(unsigned int));
 
@@ -1514,7 +1519,7 @@ static int mxupcie_ioctl(struct tty_struct * tty, unsigned int cmd,
 				ret = mxCPLDSetTerminator(cpld,	port_idx, (int) arg);
 				MX_CPLD_UNLOCK( &(mxupciecfg[info->board_idx].board_lock) );
 				return ret;
-			// CP100N series not support SW control terminator
+			// CP100N series not support SW control terminator 
 			case MXUPCIE_BOARD_CP102N:
 			case MXUPCIE_BOARD_CP132N:
 			case MXUPCIE_BOARD_CP112N:
@@ -1879,25 +1884,25 @@ static int mx_ioctl_special(unsigned int cmd, unsigned long arg)
 				return -EFAULT;
 
 			return 0;
+		case SMARTIO_GET_PCI_CAPABILITY:{
+			unsigned char uchCap[MXUPCIE_BOARDS];
 
-            case SMARTIO_GET_PCI_CAPABILITY:{
-				unsigned char uchCap[MXUPCIE_BOARDS];
-				error = MX_ACCESS_CHK(VERIFY_WRITE, (void *)arg, sizeof(unsigned char) * MXUPCIE_BOARDS);
-				
-				if ( MX_ERR(error) )
-					return error;
-					
-				for(i = 0; i<MXUPCIE_BOARDS; i++)
-				{
-					get_pci_capability( &mxupciecfg[i], &uchCap[i] ); 
-				}       
-				
-				if (copy_to_user((void*)arg, &uchCap, sizeof(unsigned char) * MXUPCIE_BOARDS))
-					return -EFAULT;
+			error = MX_ACCESS_CHK(VERIFY_WRITE, (void *)arg, sizeof(unsigned char) * MXUPCIE_BOARDS);
 
-				return 0;
-			}
-#if 0			
+			if ( MX_ERR(error) )
+				return error;
+
+			for(i = 0; i<MXUPCIE_BOARDS; i++)
+			{
+				get_pci_capability( &mxupciecfg[i], &uchCap[i] ); 
+			}	
+
+			if (copy_to_user((void*)arg, &uchCap, sizeof(unsigned char) * MXUPCIE_BOARDS))
+				return -EFAULT;
+
+			return 0;
+		}
+#if 0
 		case SMARTIO_GET_PCI_CAPABILITY:{
 			int read_ret = 0;
 			int write_ret = 0;
@@ -1923,11 +1928,13 @@ static int mx_ioctl_special(unsigned int cmd, unsigned long arg)
 			for(i = 0; i<MXUPCIE_BOARDS; i++)
 			{
 
+				//CP118EL_A and CP114EL init terminator step will cause read/write eeprom failed
+				//We undo the init step before read/write eeprom, and do init step again after read/write eeprom
 				switch(mxupciecfg[i].board_type){
 					case MXUPCIE_BOARD_CP118EL_A:
 					case MXUPCIE_BOARD_CP114EL:
-						MX_WRITE_IOBAR3_REG(0xff, mxupciecfg[i].iobar3_addr + MOXA_PUART_GPIO_OUT);
-						MX_WRITE_IOBAR3_REG(0x0f, mxupciecfg[i].iobar3_addr + MOXA_PUART_GPIO_EN);
+						MX_WRITE_IOBAR3_REG(0xff, mxupciecfg[i].iobar3_addr + MOXA_PUART_GPIO_OUT);	//0xff is the default value in GPIO_OUT
+						MX_WRITE_IOBAR3_REG(0x0f, mxupciecfg[i].iobar3_addr + MOXA_PUART_GPIO_EN); 	//0x0f is the default value in GPIO_EN
 						break;
 					default:
 						break;
@@ -1955,7 +1962,9 @@ static int mx_ioctl_special(unsigned int cmd, unsigned long arg)
 					uchCap[i] = 0;
 
 				//pr_info("uchCap = 0x%x\n", uchCap[i]);
-	
+		
+				//CP118EL_A and CP114EL init terminator step will cause read/write eeprom failed
+				//We undo the init step before read/write eeprom, and do init step again after read/write eeprom
 				switch(mxupciecfg[i].board_type){
 					case MXUPCIE_BOARD_CP118EL_A:
 					case MXUPCIE_BOARD_CP114EL:
@@ -1973,7 +1982,7 @@ static int mx_ioctl_special(unsigned int cmd, unsigned long arg)
 				return -EFAULT;
 
 
-			return 0;
+			return ;
 		}
 #endif		
 		case SMARTIO_SET_PCI_CAPABILITY:
@@ -1983,16 +1992,17 @@ static int mx_ioctl_special(unsigned int cmd, unsigned long arg)
 			unsigned long ulRegVal = 0;
 			unsigned long epaddr;
 			unsigned short ulData = 0;
-			
+
+			struct mxupcie_pci_setting pci_setting = { 0 };
+
 			//Get EEP Content
 			epaddr = (EEP_PCI_CAP_ADDR / 2) << PCIeUartEPAddrOff;
 			ulRegVal = PCIeUartEPRdCmd;//read cmd
 			ulRegVal |= epaddr;//ep addr
 			ulRegVal |= PCIeUartEPStart;//eeprom start
 
-			struct mxupcie_pci_setting pci_setting ={0};
-
-			copy_from_user(&pci_setting, arg, sizeof(struct mxupcie_pci_setting));
+			
+			copy_from_user(&pci_setting, (const void *)arg, sizeof(struct mxupcie_pci_setting));
 			
 			//pr_info("arg -> whichPciBoard = %d\n", pci_setting.whichPciBoard);
 			//pr_info("arg -> cfg_value = %d\n", pci_setting.cfg_value);
@@ -2005,11 +2015,13 @@ static int mx_ioctl_special(unsigned int cmd, unsigned long arg)
 			if(mxupciecfg[pci_setting.whichPciBoard -1].pciInfo.pdev == NULL)
 				return -EFAULT;
 
+			//CP118EL_A and CP114EL init terminator step will cause read/write eeprom failed
+			//We undo the init step before read/write eeprom, and do init step again after read/write eeprom
 			switch(mxupciecfg[pci_setting.whichPciBoard -1].board_type){
 				case MXUPCIE_BOARD_CP118EL_A:
 				case MXUPCIE_BOARD_CP114EL:
-					MX_WRITE_IOBAR3_REG(0xff, mxupciecfg[pci_setting.whichPciBoard -1].iobar3_addr + MOXA_PUART_GPIO_OUT);
-					MX_WRITE_IOBAR3_REG(0x0f, mxupciecfg[pci_setting.whichPciBoard -1].iobar3_addr + MOXA_PUART_GPIO_EN);
+					MX_WRITE_IOBAR3_REG(0xff, mxupciecfg[pci_setting.whichPciBoard -1].iobar3_addr + MOXA_PUART_GPIO_OUT);	//0xff is the default value in GPIO_OUT
+					MX_WRITE_IOBAR3_REG(0x0f, mxupciecfg[pci_setting.whichPciBoard -1].iobar3_addr + MOXA_PUART_GPIO_EN);	//0x0f is the default value in GPIO_EN
 					break;
 				default:
 					break;
@@ -2040,6 +2052,8 @@ static int mx_ioctl_special(unsigned int cmd, unsigned long arg)
 
 			mx_pci_mdelay(20);
 
+			//CP118EL_A and CP114EL init terminator step will cause read/write eeprom failed
+			//We undo the init step before read/write eeprom, and do init step again after read/write eeprom
 			switch(mxupciecfg[pci_setting.whichPciBoard -1].board_type){
 				case MXUPCIE_BOARD_CP118EL_A:
 				case MXUPCIE_BOARD_CP114EL:
@@ -2143,7 +2157,11 @@ static void mxupcie_set_termios(struct tty_struct * tty,
 /* Handle sw stopped */
 	if ( (old_termios->c_iflag & IXON) &&
      	     !(tty->termios.c_iflag & IXON) ) {
+#if (LINUX_VERSION_CODE < VERSION_CODE(5,14,0))
     		tty->stopped = 0;
+#else
+    		tty->flow.stopped = 0;
+#endif
     		mxupcie_start(tty);
 	}
 }
@@ -2442,15 +2460,15 @@ static void mx_receive_chars(struct mxupcie_struct *info,
                 tty_insert_flip_char(&info->ttyPort, *(info->base + MOXA_PUART_MEMRBR + cnt), 0);
             }
 	#else			
-		if( mxupciecfg[info->board_idx].pci_cap==0 ){
-			//In Some VMware, the string copying will get data disorder
-			for (cnt = 0; cnt < gdl; cnt++) {
-				tty_insert_flip_char(&info->ttyPort, *(info->base + MOXA_PUART_MEMRBR + cnt), 0);
-			}                           
-		} else { 
-			tty_insert_flip_string(
+			if( mxupciecfg[info->board_idx].pci_cap==0 ){
+				//In Some VMware, the string copying will get data disorder
+            	for (cnt = 0; cnt < gdl; cnt++) {
+                	tty_insert_flip_char(&info->ttyPort, *(info->base + MOXA_PUART_MEMRBR + cnt), 0);
+	            }				
+			} else { 
+				tty_insert_flip_string(
 				&info->ttyPort, info->base + MOXA_PUART_MEMRBR, gdl);
-		}
+			}
 	#endif			
 			cnt = gdl;
 		}
@@ -2512,6 +2530,7 @@ end_intr:	// add by Victor Yu. 09-02-2002
 	info->mon_data.rxcnt += cnt;
 	info->mon_data.up_rxcnt += cnt;
     info->icount.rx += cnt;
+
 }
 
 
@@ -2531,8 +2550,11 @@ static void mx_transmit_chars(struct mxupcie_struct *info)
 		}
 		return;
 	}
-
+#if (LINUX_VERSION_CODE < VERSION_CODE(5,14,0))
 	if (info->tty->stopped){
+#else
+	if (info->tty->flow.stopped){
+#endif
 		info->IER &= ~UART_IER_THRI;
 		MX_WRITE_REG(info->IER, info->base + UART_IER);
 		return;
@@ -2553,16 +2575,13 @@ static void mx_transmit_chars(struct mxupcie_struct *info)
             *(info->base+MOXA_PUART_MEMTHR+i) = *(info->xmit_buf+info->xmit_tail+i); 
         }    
 #else
-        if( mxupciecfg[info->board_idx].pci_cap==0 ){
+		if( mxupciecfg[info->board_idx].pci_cap==0 ){
 			//In Some VMware, the memcpy copying will get data disorder
-			for (i = 0; i < cnt; i++) {
+        	for (i = 0; i < cnt; i++) {
 				*(info->base+MOXA_PUART_MEMTHR+i) = *(info->xmit_buf+info->xmit_tail+i); 
 			}
-		} else {
-			//memcpy(info->base + MOXA_PUART_MEMTHR,info->xmit_buf+info->xmit_tail,cnt);
-			for (i = 0; i < cnt; i++) {
-				*(info->base+MOXA_PUART_MEMTHR+i) = *(info->xmit_buf+info->xmit_tail+i);
-			}
+	    } else {
+			memcpy(info->base + MOXA_PUART_MEMTHR,info->xmit_buf+info->xmit_tail,cnt);
 		}
 #endif
 		info->xmit_tail += cnt;
@@ -2595,9 +2614,10 @@ static void mx_check_modem_status(struct mxupcie_struct *info,
 	if ( status & UART_MSR_DDCD ) {
 	    if ( tty ) {
 		ld = tty_ldisc_ref(tty);
-		if ( ld )
-		    if( ld->ops->dcd_change )
-                        ld->ops->dcd_change(tty, ((status & UART_MSR_DCD)? TIOCM_CAR : 0));
+		if ( ld ) {
+		    if ( ld->ops->dcd_change )
+			    ld->ops->dcd_change(tty, ((status & UART_MSR_DCD)? TIOCM_CAR : 0));
+		}
 		tty_ldisc_deref(ld);
 	    }
 	    info->icount.dcd++;
@@ -2775,6 +2795,7 @@ static int mx_startup(struct mxupcie_struct * info)
 	for(i = 0; i < 5; i++) {
 		MX_WRITE_REG((UART_FCR_CLEAR_RCVR | UART_FCR_CLEAR_XMIT),info->base + UART_FCR);
 	}
+
 	/*
 	 * At this point there's no way the LSR could still be 0xFF;
 	 * if it is, then bail out, because there's likely no UART
@@ -3218,7 +3239,6 @@ static int mx_set_baud(struct mxupcie_struct *info, long newspd)
 		info->MCR &= ~UART_MCR_DTR;
 		MX_WRITE_REG(info->MCR, info->base + UART_MCR);
 	}
-
 	if (i != BAUD_TABLE_NO) {
 		cval = MX_READ_REG(info->base + UART_LCR);
 		MX_WRITE_REG(cval | UART_LCR_DLAB, info->base + UART_LCR);  /* set DLAB */
@@ -3250,16 +3270,14 @@ static int mx_set_baud(struct mxupcie_struct *info, long newspd)
  * friends of mxupcie_ioctl()
  * ------------------------------------------------------------
  */
-
-#if (LINUX_VERSION_CODE >= VERSION_CODE(4,20,0)) || defined(RHEL8_PATCH1)
 static int mx_get_serial_info(struct tty_struct * tty,
-				struct serial_struct * retinfo)
+				 struct serial_struct * retinfo)
 {
 	struct mxupcie_struct *info;
 
-	if(!retinfo || !tty)
+	if ( !retinfo || !tty)
 		return(-EFAULT);
-
+	
 	info = (struct mxupcie_struct *)tty->driver_data;
 
 	retinfo->type = info->type;
@@ -3275,35 +3293,7 @@ static int mx_get_serial_info(struct tty_struct * tty,
 
 	return 0;
 }
-#else
-static int mx_get_serial_info(struct mxupcie_struct * info,
-				 struct serial_struct * retinfo)
-{
-	struct serial_struct	tmp;
 
-	if ( !retinfo )
-		return(-EFAULT);
-
-	memset(&tmp, 0, sizeof(tmp));
-	tmp.type = info->type;
-	tmp.line = info->port;
-	tmp.port = *info->base;
-	tmp.irq = info->irq;
-	tmp.flags = info->flags;
-	tmp.baud_base = info->baud_base;
-	tmp.close_delay = info->close_delay;
-	tmp.closing_wait = info->closing_wait;
-	tmp.custom_divisor = info->custom_divisor;
-	tmp.hub6 = 0;
-
-	if(copy_to_user(retinfo, &tmp, sizeof(*retinfo)))
-		return -EFAULT;
-
-	return 0;
-}
-#endif
-
-#if (LINUX_VERSION_CODE >= VERSION_CODE(4,20,0)) || defined(RHEL8_PATCH1)
 static int mx_set_serial_info(struct tty_struct * tty,
 				 struct serial_struct * new_info)
 {
@@ -3340,15 +3330,15 @@ static int mx_set_serial_info(struct tty_struct * tty,
 		info->flags = ((info->flags & ~ASYNC_FLAGS) | (new_info->flags & ASYNC_FLAGS));
 		info->close_delay = new_info->close_delay * HZ/100;
 		info->closing_wait = new_info->closing_wait * HZ/100;
+#if (LINUX_VERSION_CODE < VERSION_CODE(5,12,0))
 		info->ttyPort.low_latency = 0;
-
+#endif
 		if( (new_info->baud_base != info->baud_base) ||
 		    (new_info->custom_divisor != info->custom_divisor) )
 			info->custom_baud_rate = new_info->baud_base/new_info->custom_divisor;
 	}
 
 	info->type = new_info->type;
-
 	mx_process_txrx_fifo(info);
 
 	if ( info->flags & ASYNC_INITIALIZED ) {
@@ -3363,68 +3353,39 @@ static int mx_set_serial_info(struct tty_struct * tty,
 
 	return retval;
 }
-#else
-static int mx_set_serial_info(struct mxupcie_struct * info,
-				 struct serial_struct * new_info)
+
+static int mx_get_icount(struct tty_struct *tty, struct serial_icounter_struct *icount)
 {
-	struct serial_struct	new_serial;
-	unsigned int		flags;
-	int			retval = 0;
+	struct mxupcie_struct *info;
+	struct async_icount cnow;
 
 	MX_LOCK_INIT();
 
-	if ( !new_info || !info->base )
+	if (!tty )
 		return -EFAULT;
 
-	if(copy_from_user(&new_serial, new_info, sizeof(new_serial)))
-		return -EFAULT;
+	info = (struct mxupcie_struct *)tty->driver_data;
 
-	if ( (new_serial.irq != info->irq) ||
-	     (new_serial.port != *info->base) )
-		return -EPERM;
+	MX_LOCK(&info->slock);
+	cnow = info->icount;
+	MX_UNLOCK(&info->slock);
 
-	flags = info->flags & ASYNC_SPD_MASK;
+	icount->frame = cnow.frame;
+	icount->brk = cnow.brk;
+	icount->overrun = cnow.overrun;
+	icount->buf_overrun = cnow.buf_overrun;
+	icount->parity = cnow.parity;
+	icount->rx = cnow.rx;
+	icount->tx = cnow.tx;
+	icount->cts = cnow.cts;
+	icount->dsr = cnow.dsr;
+	icount->rng = cnow.rng;
+	icount->dcd = cnow.dcd;
+	return 0;
 
-       if ( !capable(CAP_SYS_ADMIN)) {
-		if ( (new_serial.baud_base != info->baud_base) ||
-		     (new_serial.close_delay != info->close_delay) ||
-		    ((new_serial.flags & ~ASYNC_USR_MASK) !=
-		    (info->flags & ~ASYNC_USR_MASK)) )
-			return(-EPERM);
 
-		info->flags = ((info->flags & ~ASYNC_USR_MASK) | (new_serial.flags & ASYNC_USR_MASK));
-	} else {
-	    /*
-	     * OK, past this point, all the error checking has been done.
-	     * At this point, we start making changes.....
-	     */
-		info->flags = ((info->flags & ~ASYNC_FLAGS) | (new_serial.flags & ASYNC_FLAGS));
-		info->close_delay = new_serial.close_delay * HZ/100;
-		info->closing_wait = new_serial.closing_wait * HZ/100;
-		info->ttyPort.low_latency = 0;
-
-		if( (new_serial.baud_base != info->baud_base) ||
-		    (new_serial.custom_divisor != info->custom_divisor) )
-			info->custom_baud_rate = new_serial.baud_base/new_serial.custom_divisor;
-	}
-
-	info->type = new_serial.type;
-	
-	mx_process_txrx_fifo(info);
-
-	if ( info->flags & ASYNC_INITIALIZED ) {
-		if ( flags != (info->flags & ASYNC_SPD_MASK) ){
-			MX_LOCK(&info->slock);
-			mx_change_speed(info,0);
-			MX_UNLOCK(&info->slock);
-		}
-	} else{
-	    retval = mx_startup(info);
-	}
-
-	return retval;
 }
-#endif
+
 
 /*
  * mx_get_lsr_info - get line status register info
@@ -3699,8 +3660,8 @@ static int mx_set_terminator(struct mxupcie_struct *info, unsigned char val)
 	if(info->UIR == MOXA_UIR_RS232)
 		return 0; //return -EINVAL;
 
-	//Don't support terminator resistor controlled by SW
-	if(	info->board_type == MXUPCIE_BOARD_CP112N ||
+       //Don't support termination resistor controlled by SW	
+	if(	info->board_type == MXUPCIE_BOARD_CP112N || 
 		info->board_type == MXUPCIE_BOARD_CP114N ||
 		info->board_type == MXUPCIE_BOARD_CP132N ||
 		info->board_type == MXUPCIE_BOARD_CP134N 
@@ -3806,20 +3767,17 @@ static void mx_process_txrx_fifo(struct mxupcie_struct *info)
 
 static void mx_pci_mdelay(unsigned howlong)
 {
-#if defined(RHEL8_PATCH1) && defined(task_is_running) 
-	current->__state = TASK_INTERRUPTIBLE;
-#else
+#if (LINUX_VERSION_CODE < VERSION_CODE(5,14,0))
 	current->state = TASK_INTERRUPTIBLE;
+#else
+	current->__state = TASK_INTERRUPTIBLE;
 #endif
 	schedule_timeout(howlong);
 }
 
 static void get_pci_capability( struct mxupcie_hwconf *hwconf, unsigned char * eep_ret )
 {
-	int read_ret = 0;
 	int write_ret = 0;
-	int j = 0;
-	unsigned char flag;
 	unsigned long ulRegVal = 0;
 	unsigned long epaddr;
 	unsigned short ulData = 0;
@@ -3829,44 +3787,46 @@ static void get_pci_capability( struct mxupcie_hwconf *hwconf, unsigned char * e
 	ulRegVal = PCIeUartEPRdCmd;//read cmd
 	ulRegVal |= epaddr;//ep addr
 	ulRegVal |= PCIeUartEPStart;//eeprom start
-	
+
 	if(hwconf->pciInfo.pdev == NULL)
 		return;
-		
+	
 	//CP118EL_A and CP114EL init terminator step will cause read/write eeprom failed
 	//We undo the init step before read/write eeprom, and do init step again after read/write eeprom
 	if( hwconf->board_type==MXUPCIE_BOARD_CP118EL_A || hwconf->board_type==MXUPCIE_BOARD_CP114EL ){
-		MX_WRITE_IOBAR3_REG(0xff, hwconf->iobar3_addr + MOXA_PUART_GPIO_OUT);   //0xff is the default value in GPIO_OUT
-		MX_WRITE_IOBAR3_REG(0x0f, hwconf->iobar3_addr + MOXA_PUART_GPIO_EN);    //0x0f is the default value in GPIO_EN
+		MX_WRITE_IOBAR3_REG(0xff, hwconf->iobar3_addr + MOXA_PUART_GPIO_OUT);	//0xff is the default value in GPIO_OUT
+		MX_WRITE_IOBAR3_REG(0x0f, hwconf->iobar3_addr + MOXA_PUART_GPIO_EN); 	//0x0f is the default value in GPIO_EN
 	}
-	
 	//pr_info("i=%d, pciinfo.busNum= %d, pciinfo.devNum= %d\n", i, mxupciecfg[i].pciInfo.busNum, mxupciecfg[i].pciInfo.devNum);
-	
+		
 	if(hwconf->pciInfo.pdev == NULL)
 		return;
-		
+
 	write_ret = pci_write_config_word(hwconf->pciInfo.pdev, PCI_EEP_CTRL_ADDR, ulRegVal);
-	//pr_info("write_ret = %d\n", write_ret);
 	
+	//pr_info("write_ret = %d\n", write_ret);
+
 	mx_pci_mdelay(20);
 	
 	pci_read_config_word(hwconf->pciInfo.pdev, PCI_EEP_DATA_ADDR, &ulData);
+	
 	//pr_info("read_ret = %d, Read PCI 0xdc = 0x%X\n", read_ret, ulData);
 	
 	*eep_ret = (unsigned char)(ulData>>12);
-	
+
 	if( *eep_ret == 0x8)
 		*eep_ret = 1;
 	else
 		*eep_ret = 0;
-		
+
 	//pr_info("uchCap = 0x%x\n", uchCap[i]);
+	
 	//CP118EL_A and CP114EL init terminator step will cause read/write eeprom failed
 	//We undo the init step before read/write eeprom, and do init step again after read/write eeprom
 	if( hwconf->board_type==MXUPCIE_BOARD_CP118EL_A || hwconf->board_type==MXUPCIE_BOARD_CP114EL ){
 		MX_WRITE_IOBAR3_REG(0xff, hwconf->iobar3_addr + MOXA_PUART_GPIO_EN);
 		MX_WRITE_IOBAR3_REG(0x00, hwconf->iobar3_addr + MOXA_PUART_GPIO_OUT);
-	}       
+	}	
 }
 
 //
@@ -3882,7 +3842,7 @@ static void mx_set_hw_buffer (struct mxupcie_struct *info, unsigned char val)
             (info->board_type == MXUPCIE_BOARD_CP132N) ||
 	    (info->board_type == MXUPCIE_BOARD_CP112N) ||
 	    (info->board_type == MXUPCIE_BOARD_CP104N) ||
-            (info->board_type == MXUPCIE_BOARD_CP134N) ||
+	    (info->board_type == MXUPCIE_BOARD_CP134N) ||
 	    (info->board_type == MXUPCIE_BOARD_CP114N) )
 	{
 		//

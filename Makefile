@@ -9,21 +9,20 @@ MX_CURR_DATE:=$(shell date +%g%m%d%H)
 KERNEL_VERSION_MAJOR_NUMBER:=$(shell uname -r | cut -f1 -d.)
 KERNEL_VERSION_MINOR_NUMBER:=$(shell uname -r | cut -f2 -d.)
 
-DRIVER_PATH:=driver/kernel4.x
+DRIVER_PATH:=driver/kernel5.x
 
 all: check_version mxser
-install: check_version clean utility_install driver_install
-RHEL8P1: check_version clean utility_install driver_install_rhel8p1
+install: check_version clean driver_install
 
-clean: check_version driver_clean utility_clean
+clean: check_version driver_clean 
 
 remove: check_version uninstall
-uninstall: check_version driver_uninstall utility_uninstall
+uninstall: check_version driver_uninstall
 
 check_version:
-ifneq ("$(KERNEL_VERSION_MAJOR_NUMBER)","4")
+ifneq ("$(KERNEL_VERSION_MAJOR_NUMBER)","5")
 	@echo "Error: Your kernel version is $(KERNEL_VERSION_MAJOR_NUMBER).x."
-	@echo "       This driver only support linux kernel 4.x."
+	@echo "       This driver only support linux kernel 5.x."
 	@exit 1;
 endif
 
@@ -42,13 +41,14 @@ driver_install:
 	@cd ${DRIVER_PATH};\
 	make install -s 
 
-driver_install_rhel8p1:
-	@echo ""
-	@echo " Build driver for Linux kernel ${KERNEL_VERSION_MAJOR_NUMBER}.x"
-	@echo ""
+driver_installsp1:
 	@cd ${DRIVER_PATH};\
-	make RHEL8P1 -s 
-
+	make installsp1 -s
+	
+driver_installsp2:
+	@cd ${DRIVER_PATH};\
+	make installsp2 -s
+	
 utility_install:
 	@cd utility;\
 	make install -s 
@@ -65,8 +65,6 @@ utility_clean:
 driver_uninstall:
 	@cd ${DRIVER_PATH};\
 	make uninstall -s
-	@rm -f /etc/systemd/system/moxa_unbind.service
-	@rm -f /etc/moxa/moxa_unbind
 
 utility_uninstall:
 	@cd utility;\
@@ -102,3 +100,4 @@ endif
 	tar -cvzf ../disk/driv_linux_smart_v$(MX_BUILD_VER)_build_$(MX_CURR_DATE).tgz ../mxser
 	@rm -rf ../mxser
 	@echo "Done"
+

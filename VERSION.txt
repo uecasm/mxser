@@ -1,6 +1,6 @@
-Version Number:     4.2
+Version Number:     5.2
 Product Line:       Moxa Smartio/Industio/UPCI/PCIe Family
-Platform:           x86, x64, ARM64, Linux kernel 4.x
+Platform:           x86, x64, ARM64, Linux kernel 5.x
 Company:            Moxa Inc.
 Date:               07/22/2022
 
@@ -42,13 +42,15 @@ CP-102N, CP-132N, CP-112N, CP-104N, CP-134N, CP-114N
 
 Release Note:
 =============
-Ver4.2
-1. New: Support new models CP-102N, CP-132N, CP-112N, CP-104N, CP-134N, CP-114N.
-2. Bugfix: Fixed driver may freeze when user continuously open port, send break, close port.
-3. Bugfix: Fixed "access_ok passed 3 arguments but taked just 2" error in kylin linux.
-4. Bugfix: Fixed compile error which cause by kernel change the type and name of task_struct::state after RHEL8.5 system.
+Ver5.2
+New: 
+1. Support new models CP-102N, CP-132N, CP-112N, CP-104N, CP-134N, CP-114N.
+Bugfix: 
+1. Fixed driver may freeze when user continuously open port, send break, close port.
+2. Fixed put_tty_driver has been replaced with tty_driver_kref_put after linux kernel 5.15.
+3. Fixed alloc_tty_driver been replaced with tty_alloc_driver after linux kernel 5.15.
 
-Ver4.1 Build 21102516
+Ver5.1 Build 21102516
 New: 
 1. Supporting ARM64 platform.
 
@@ -56,19 +58,14 @@ Change:
 1. Downgraded software license from GPLv3 to GPLv2.
 2. Avoiding mxinstall to compile "msmon" and "msterm" which are not supported in ARM system.
 
-Bugfix
-1. Fixed baud rate mismatches when build-in kernel module "8250_moxa" is running.
-2. Fixed compile driver in RHEL8, system would return compile error "access_ok passed 3 arguments but takes just 2".
-3. Fixed drivers can not be loaded by rc.mxser in RHEL8.
-4. Fixed muestty could not set device's serial interface type to RS-232.
-5. The tty ports in the device cannot be scanned by third-party utilities implemented using the QT serial ports library (e.g,, CuteCom).
-6. Fixed "File is worng format" error while compiling utility.
-7. Fixed the compile "error ASYNCB_ undeclared" in Debina 9 (kernel 4.9).
+Bugfix: 
+1. Fixed muestty could not set device's serial interface type to RS-232.
+2. Fixed baud rate mismatch when Linux kernel version is newer than 5.4.
+3. Fixed utility compiling failed in Debian and Kylin.
 
 
-Ver4.0 Build 19090215
-1. Change: Divided an independent driver version 4.0 to support Linux kernel 
-           4.x.
+Ver5.0 Build 19090215
+1. Change Divided an independent driver version 5.0 to support Linux kernel 5.x.
 2. Improve: Support Linux Pluse Per Second.
 3. Improve: Enable CLOCAL when opening port if the interface is NOT RS232.
 4. Improve: When getting modem status, the state of CTS/DSR/DCD will always
@@ -83,7 +80,7 @@ Ver4.0 Build 19090215
 9. Bugfix: Fix the error of terminator initialization for CP-114EL.
 10. Bugfix: Fixed the issue that interrupt counter of Rx is not available.
 11. Bugfix: Fixed that Tx flush may cause wrong data to be sent when using PCIe
-            cards.
+           cards.
 
 Ver1.16 Build 14030317
 1. New: Support new models CP-134EL-A-I, CP-118E-A-I, CP-138E-A-I, CP-116E-A.

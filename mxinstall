@@ -17,6 +17,7 @@
 TARGET_DRIVER1=mxser
 TARGET_DRIVER2=mxupcie
 BAN_DRIVER1=8250_moxa
+BAN_DRIVER2=8250_pci
 MXVER=`awk '{if($2=="MX_SER_VERSION"){print $3}}' mx_ver.h | sed s/\"//g`
 MAJOR_PCI=30
 MAJOR_PCIE=31
@@ -50,7 +51,7 @@ echo "$MOXA_DEVICE" | tr ' ' '\n' | while read i; do
 			then
 				REPROBE_MOXA_DRIVER=1
 			fi
-
+			
 			if [ "$REPROBE_MOXA_DRIVER" -eq "1" ]
 			then
 				./driver/moxa_unbind
@@ -95,23 +96,11 @@ fi
 
 if [ "$INPUT" = "" ] ; then
 	INPUT="install"
-	
-	if [ -f /etc/redhat-release ]; then
-		TEMP=`cat /etc/redhat-release`
-		case $TEMP in
-			*"Red Hat"*) INPUT="RHEL8P1"
-			;;
-			*"CentOS"*) INPUT="RHEL8P1"
-			;;
-			*"Rocky"*) INPUT="RHEL8P1"
-			;;
-		esac
-	fi
 fi
 
 if make $INPUT ; then
 	echo ""
-	echo "Loading driver"
+	echo "Loading driver..."
 	modprobe $TARGET_DRIVER1
 	modprobe $TARGET_DRIVER2
 	[ -f /dev/mxser ] || rm -rf /dev/mxser

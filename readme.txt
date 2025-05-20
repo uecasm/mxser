@@ -1,6 +1,6 @@
 =============================================================================
           MOXA Smartio/Industio Family Device Driver Installation Guide
-            for Linux Kernel 4.x
+            for Linux Kernel 5.x
            Copyright (C) 2022, Moxa Inc.
 =============================================================================
 Date: 07/14/2022 
@@ -126,12 +126,12 @@ Content
    Note: The MUE series includes CP-102E, CP-102EL, CP-132EL, CP-132EL-I,
          CP-114EL, CP-114EL-I, CP-104EL-A, CP-168EL-A, CP-118EL-A,
          CP-118E-A-I, CP-138E-A, CP-134EL-A, CP-116E-A, and supports
-         linux kernel 4.x.
+         linux kernel 5.x.
 
 -----------------------------------------------------------------------------
 2. System Requirement
    - Hardware platform: x86, x64
-   - Kernel version: 4.x 
+   - Kernel version: 5.x 
    - gcc version 2.72 or later
    - Maximum 4 boards can be installed in combination
    - Kernel source
@@ -141,7 +141,7 @@ Content
          You can use muestty, the utility contained in this driver, to enable
          VM-Compatible feature. You can refer to the "4. Utilities" for more 
          detail.
-        
+   
 -----------------------------------------------------------------------------
 3. Installation
 
@@ -289,10 +289,7 @@ Content
 
           !!!!!!!!!! NOTE !!!!!!!!!!!!!!!!! 
       For Red Hat Enterprise Linux AS4/ES4/WS4:
-      # make installsp2
-
-      For Red Hat Enterprise Linux 8
-      # make installsp3
+      # make install sp2
           !!!!!!!!!! NOTE !!!!!!!!!!!!!!!!! 
   
        ------------- Load MOXA driver--------------------  
@@ -335,10 +332,12 @@ Content
         Run the following command for setting rc files.
         
         # cd /moxa/mxser/driver
-        # cp ./rc.mxser /etc/init.d/
-        # cp ./mxser.service /etc/systemd/system/
-        # systemctl enable mxser.service
-        # systemctl start mxser.service
+        # cp ./rc.mxser /etc/rc.d/
+        # cd /etc/rc.d
+
+	Check "rc.serial" is existed or not. If "rc.serial" doesn't exist, 
+        create it by vi, run "chmod 755 rc.serial" to change the permission.
+        Add "/etc/rc.d/rc.mxser" in last line, 
 
         Reboot and check if mxser or mxupcie activated by "lsmod" command.
 
@@ -429,7 +428,7 @@ Content
         #rmmod mxupcie
 
       Step 2: Activate the driver with parameters.
-
+    
         #modprobe mxupcie interface=2 terminator=1
                           |           |
                           |           +- 120 ohm
@@ -486,6 +485,7 @@ Content
       # ln -s /moxa/mxser/driver/mxser.h mxser.h
       # ln -s /moxa/mxser/driver/mxpcie.c mxupcie.c
       # ln -s /moxa/mxser/driver/mxpcie.h mxupcie.h
+
 
        3.5.3 Modify kernel configuration file.
           Add the following lines into the configuration file.
@@ -935,32 +935,23 @@ Content
    
    8.2 Baud rate mismatch when using MUE series PCI Express multiport board.
 
-   This is a problem of the build-in kernel module or driver. 
+   This is a problem of the build-in kernel module or driver.
    Please run the script in the following file path.
-
+    
     mxser/driver/moxa_unbind
-
+   
    The script will unbind build-in module or driver, and reactive MOXA device
-   driver mxupcie. You can follow below steps to run the script automatically 
-   on your system boot.
+   driver mxupcie. You can following the following step to run script 
+   automatically on your system boot.
 
     Step 1. Using crontab for scheduling the job.
-
+            
             # crontab -e
 
-    Step 2. Type the following command on the last line
+    Step 2. type the following command on the last line 
 
-            @reboot sh <THE_FULL_PATH_OF_THIS_DRIVER>/mxser/driver/moxa_unbind
+            @reboot sh <THE_FULL_PATH_OF_THIS_DRIVER>/mxser/driver/unbindin
 
-Please follow below steps
-   to remove build-in module.
-
-    Step 1. Create /etc/modprobe.d/blacklist.conf if it is not exit.
-    Step 2. Add following line into the file
-            blacklist 8250_moxa
-    Step 3. Reboot the system
-    Step 4. Reload the mxupcie module again.
-   
    8.3 /dev/ppp device always try to reconnect while dail-in/dail-out
 
    This is a problem of the PCI device latency. Please follow below steps 
@@ -976,7 +967,7 @@ Please follow below steps
    Please follow below steps to enable MOXA PCIE device VM-Compatible.
    
    Note: The following steps MUST be configure in physical computer with
-         linux operating system. If you execute these commands in virtual
+         linux operating system. If you execute these commands in virtual 
          machine, these configurations may not work correctly.
 
     Step 1. Use muestty, the utility contain in this driver, to get the 
@@ -987,5 +978,6 @@ Please follow below steps
     Step 2. Enable VM-Compatible with board_number
 
     # muestty -v 1 <board_number>
-
+   
 -----------------------------------------------------------------------------
+

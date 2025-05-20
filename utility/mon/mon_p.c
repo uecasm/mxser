@@ -41,6 +41,8 @@
 #define Card		0
 #define CBox		1
 
+WINDOW		win[MaxWindow]; 	/* window struct */
+WINDOW		*wstd;			/* standard screen */
 
 struct	Moniter_str {
 	int	tick;
@@ -49,7 +51,6 @@ struct	Moniter_str {
 };
 typedef struct	Moniter_str	Moniter_t;
 typedef struct	Moniter_str *	f_Moniter_t;
-
 
 /*****************************************************************************/
 /* GLOBAL FUNCTIONS							     */

@@ -327,10 +327,10 @@
 
 #define MX_TTY_DRV(x)	tty->driver->x
 
-#ifdef VERIFY_WRITE
-#define MX_ACCESS_CHK(type, addr, size)		access_ok(type, addr, size)
+#if (LINUX_VERSION_CODE < VERSION_CODE(5,0,0))
+#define MX_ACCESS_CHK(type, addr, size)	access_ok(type, addr, size)	
 #else
-#define MX_ACCESS_CHK(type, addr, size)		access_ok(addr, size)
+#define MX_ACCESS_CHK(type, addr, size)	access_ok(addr, size)	
 #endif
 
 #define MX_ERR(x)	!(x)	
@@ -346,44 +346,42 @@
 typedef unsigned char	UCHAR;
 #endif
 
-
 #ifndef ASYNCB_SHARE_IRQ
-	#define ASYNCB_SHARE_IRQ	24
+        #define ASYNCB_SHARE_IRQ        24
 #endif
 #ifndef ASYNC_SHARE_IRQ
-	#define ASYNC_SHARE_IRQ		(1U << ASYNCB_SHARE_IRQ)
+        #define ASYNC_SHARE_IRQ         (1U << ASYNCB_SHARE_IRQ)
 #endif
 #ifndef ASYNCB_CHECK_CD
-	#define ASYNCB_CHECK_CD		25
+        #define ASYNCB_CHECK_CD         25
 #endif
 #ifndef ASYNC_CHECK_CD
-	#define ASYNC_CHECK_CD		(1U << ASYNCB_CHECK_CD)
+        #define ASYNC_CHECK_CD          (1U << ASYNCB_CHECK_CD)
 #endif
 #ifndef ASYNCB_CTS_FLOW
-	#define ASYNCB_CTS_FLOW		26
+        #define ASYNCB_CTS_FLOW         26
 #endif
 #ifndef ASYNC_CTS_FLOW
-	#define ASYNC_CTS_FLOW		(1U << ASYNCB_CTS_FLOW)
+        #define ASYNC_CTS_FLOW          (1U << ASYNCB_CTS_FLOW)
 #endif
 #ifndef ASYNCB_CLOSING
-	#define ASYNCB_CLOSING		27
+        #define ASYNCB_CLOSING          27
 #endif
 #ifndef ASYNC_CLOSING
-	#define ASYNC_CLOSING		(1U << ASYNCB_CLOSING)
+        #define ASYNC_CLOSING           (1U << ASYNCB_CLOSING)
 #endif
 #ifndef ASYNCB_NORMAL_ACTIVE
-	#define ASYNCB_NORMAL_ACTIVE	29
+        #define ASYNCB_NORMAL_ACTIVE    29
 #endif
 
 #ifndef ASYNC_NORMAL_ACTIVE
-	#define ASYNC_NORMAL_ACTIVE	(1U << ASYNCB_NORMAL_ACTIVE)
+        #define ASYNC_NORMAL_ACTIVE     (1U << ASYNCB_NORMAL_ACTIVE)
 #endif
 #ifndef ASYNCB_INITIALIZED
-	#define ASYNCB_INITIALIZED	31
+        #define ASYNCB_INITIALIZED      31
 #endif
 #ifndef ASYNC_INITIALIZED
-	#define ASYNC_INITIALIZED	(1U << ASYNCB_INITIALIZED)
+        #define ASYNC_INITIALIZED       (1U << ASYNCB_INITIALIZED)
 #endif
-
 
 #endif

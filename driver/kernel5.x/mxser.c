@@ -244,6 +244,12 @@
 #define	CA114_ID    	5
 #define	CA134I_ID    	6
 
+#if (LINUX_VERSION_CODE < VERSION_CODE(5,0,0))
+#define ACCESS_OK(x,y,z) access_ok(x,y,z)
+#else
+#define ACCESS_OK(x,y,z) access_ok(y,z)
+#endif
+
 enum	{
 	MXSER_BOARD_C168_ISA = 1,
 	MXSER_BOARD_C104_ISA,
@@ -635,9 +641,6 @@ struct mxser_struct {
 	spinlock_t		slock;
 	int			speed;
 	int			custom_baud_rate;
-#if (LINUX_VERSION_CODE >= VERSION_CODE(4,6,0))
-	int close;
-#endif
 };
 
 
@@ -710,9 +713,15 @@ static int	mxser_open(struct tty_struct *, struct file *);
 static void	mxser_close(struct tty_struct *, struct file *);
 
 static int	mxser_write(struct tty_struct *, const unsigned char *, int);
+#if (LINUX_VERSION_CODE < VERSION_CODE(5,14,0))
 static int	mxser_write_room(struct tty_struct *);
-static void	mxser_flush_buffer(struct tty_struct *);
 static int	mxser_chars_in_buffer(struct tty_struct *);
+#else
+static unsigned int mxser_write_room(struct tty_struct *);
+static unsigned int mxser_chars_in_buffer(struct tty_struct *);
+#endif
+static void	mxser_flush_buffer(struct tty_struct *);
+
 static void	mxser_flush_chars(struct tty_struct *);
 static int	mxser_put_char(struct tty_struct *, unsigned char);
 static int	mxser_ioctl(struct tty_struct *, uint, ulong);
@@ -734,15 +743,11 @@ static int	mxser_block_til_ready(struct tty_struct *, struct file *, struct mxse
 static int	mxser_startup(struct mxser_struct *);
 static void	mxser_shutdown(struct mxser_struct *);
 static int	mxser_change_speed(struct mxser_struct *, struct ktermios *old_termios);
-#if (LINUX_VERSION_CODE >= VERSION_CODE(4,20,0)) || defined(RHEL8_PATCH1)
 static int	mxser_get_serial_info(struct tty_struct *, struct serial_struct *);
 static int	mxser_set_serial_info(struct tty_struct *, struct serial_struct *);
-#else
-static int	mxser_get_serial_info(struct mxser_struct *, struct serial_struct *);
-static int	mxser_set_serial_info(struct mxser_struct *, struct serial_struct *);
-#endif
+static int	mxser_get_icount(struct tty_struct *tty, struct serial_icounter_struct *icount);
 static int	mxser_get_lsr_info(struct mxser_struct *, unsigned int *);
-static void	mxser_send_break(struct mxser_struct *, int);
+//static void	mxser_send_break(struct mxser_struct *, int);
 static int mxser_tiocmget(struct tty_struct *);
 static int mxser_tiocmset(struct tty_struct *, unsigned int, unsigned int);
 static int mxser_set_baud(struct mxser_struct *info, long newspd);
@@ -794,10 +799,9 @@ static struct tty_operations mxser_ops = {
 	.hangup = mxser_hangup,
 	.tiocmget = mxser_tiocmget,
 	.tiocmset = mxser_tiocmset,
-#if (LINUX_VERSION_CODE >= VERSION_CODE(4,20,0)) || defined(RHEL8_PATCH1)
 	.set_serial = mxser_set_serial_info,
 	.get_serial = mxser_get_serial_info,
-#endif
+	.get_icount = mxser_get_icount,
 	.break_ctl = mxser_rs_break,
 	.wait_until_sent = mxser_wait_until_sent,
 };
@@ -818,15 +822,14 @@ INIT_FUNC_RET	INIT_FUNC(void)
 
 CLEAR_FUNC_RET	CLEAR_FUNC(void)
 {
-	int i,err = 0;
+	int i;
 	struct ktermios *tp;
 	void *p;
 
 	if (verbose)
 		pr_info("Unloading module mxser ...\n");
 
-	if ((err |= tty_unregister_driver(DRV_VAR)))
-		pr_info("Couldn't unregister MOXA Smartio/Industio family serial driver\n");
+	tty_unregister_driver(DRV_VAR);
 
 	for (i = 0; i < DRV_VAR->num; i++) {
 		tp = DRV_VAR->termios[i];
@@ -921,6 +924,7 @@ int mxser_initbrd(int board,struct mxser_hwconf *hwconf)
 		if(info->IsMoxaMustChipFlag!=MOXA_OTHER_UART){
 			ENABLE_MOXA_MUST_ENCHANCE_MODE(info->base);
 		}
+
 		info->flags = ASYNC_SHARE_IRQ;
 		info->type = hwconf->uart_type;
 		info->baud_base = hwconf->baud_base[i];
@@ -1044,18 +1048,21 @@ static int mxser_get_PCI_conf(int busnum,int devnum,int board_type,struct mxser_
 
 int mxser_init(void)
 {
-	int			i, m, retval, b;
+	int			i, m, n, retval, b;
 	int         ret1, ret2;
 	int			port_idx;
 #ifdef CONFIG_PCI
 	struct pci_dev	*pdev=NULL;
 	int			index;
 	unsigned char		busnum,devnum;
-	int n = 0;
 #endif
 	struct mxser_hwconf	hwconf;
 
+#if (LINUX_VERSION_CODE >= VERSION_CODE(5,15,0))
+	mxvar_sdriver = tty_alloc_driver(MXSER_PORTS + 1, 0);
+#else
 	mxvar_sdriver = alloc_tty_driver(MXSER_PORTS + 1);
+#endif
 	if (!mxvar_sdriver)
 		return -ENOMEM;
 	spin_lock_init(&gm_lock);
@@ -1425,8 +1432,10 @@ static int mxser_open(struct tty_struct * tty, struct file * filp)
 	//status = mxser_get_msr(info->base, 0, info->port);
 	//mxser_check_modem_status(info, status);
 
+#if (LINUX_VERSION_CODE < VERSION_CODE(5,12,0))
 	/* unmark here for very high baud rate (ex. 921600 bps) used */
 	info->ttyPort.low_latency = 0;
+#endif
 	return(0);
 }
 
@@ -1569,10 +1578,13 @@ static int mxser_write(struct tty_struct * tty,
 		count -= c;
 		total += c;
 	}
-	   
+#if (LINUX_VERSION_CODE < VERSION_CODE(5,14,0))	   
 	if ( info->xmit_cnt && !tty->stopped /*&& !(info->IER & UART_IER_THRI)*/ ) {
+#else
+	if ( info->xmit_cnt && !tty->flow.stopped ) {
+#endif
 		if (!tty->hw_stopped || (info->type == PORT_16550A) || (info->IsMoxaMustChipFlag)) {
-			MX_LOCK(&info->slock); 	
+			MX_LOCK(&info->slock);
 			info->IER &= ~UART_IER_THRI;
 			outb(info->IER, info->base + UART_IER);
 			info->IER |= UART_IER_THRI;
@@ -1580,7 +1592,7 @@ static int mxser_write(struct tty_struct * tty,
 			MX_UNLOCK(&info->slock);
 		}
 	}
-//pr_info("%lu, mxser_write=%d\n", jiffies, total);
+pr_info("%lu, mxser_write=%d\n", jiffies, total);
 	return total;
 }
 
@@ -1600,7 +1612,11 @@ static int mxser_put_char(struct tty_struct * tty, unsigned char ch)
 	info->xmit_head &= SERIAL_XMIT_SIZE - 1;
 	info->xmit_cnt++;
 	MX_UNLOCK(&info->slock);
+#if (LINUX_VERSION_CODE < VERSION_CODE(5,14,0))
 	if ( !tty->stopped /*&& !(info->IER & UART_IER_THRI)*/ ) {
+#else
+	if( !tty->flow.stopped ) {
+#endif
 		if (!tty->hw_stopped || (info->type == PORT_16550A) || info->IsMoxaMustChipFlag) {
 			MX_LOCK(&info->slock);
 			info->IER &= ~UART_IER_THRI;
@@ -1622,8 +1638,13 @@ static void mxser_flush_chars(struct tty_struct * tty)
 
 //pr_info("%lu, mxser_flush_chars\n", jiffies);
 
+#if (LINUX_VERSION_CODE < VERSION_CODE(5,14,0))
 	if ( info->xmit_cnt <= 0 || tty->stopped || !info->xmit_buf ||
 		(tty->hw_stopped && (info->type!=PORT_16550A) && (!info->IsMoxaMustChipFlag)))
+#else
+	if ( info->xmit_cnt <= 0 || tty->flow.stopped || !info->xmit_buf ||
+		(tty->hw_stopped && (info->type!=PORT_16550A) && (!info->IsMoxaMustChipFlag)))
+#endif
 		return;
 
 	MX_LOCK(&info->slock);
@@ -1635,7 +1656,11 @@ static void mxser_flush_chars(struct tty_struct * tty)
 	MX_UNLOCK(&info->slock);
 }
 
+#if (LINUX_VERSION_CODE < VERSION_CODE(5,14,0))
 static int mxser_write_room(struct tty_struct * tty)
+#else
+static unsigned int mxser_write_room(struct tty_struct * tty)
+#endif
 {
 	struct mxser_struct *info = (struct mxser_struct *)tty->driver_data;
 	int	ret;
@@ -1649,7 +1674,11 @@ static int mxser_write_room(struct tty_struct * tty)
 	return(ret);
 }
 
+#if (LINUX_VERSION_CODE < VERSION_CODE(5,14,0))
 static int mxser_chars_in_buffer(struct tty_struct * tty)
+#else
+static unsigned int mxser_chars_in_buffer(struct tty_struct * tty)
+#endif
 {
 	int len;
 	struct mxser_struct *info = (struct mxser_struct *)tty->driver_data;
@@ -1694,7 +1723,6 @@ static int mxser_ioctl(struct tty_struct * tty, unsigned int cmd,
 {
 	int			error;
 	struct mxser_struct *	info = (struct mxser_struct *)tty->driver_data;
-	int			retval;
 	struct async_icount	cprev, cnow;	    /* kernel counter temps */
 	struct serial_icounter_struct *p_cuser;     /* user space */
 	unsigned long 		templ;
@@ -1801,21 +1829,6 @@ static int mxser_ioctl(struct tty_struct * tty, unsigned int cmd,
 		return(-EIO);
 	}
 	switch ( cmd ) {
-	case TCSBRK:	/* SVID version: non-zero arg --> no break */
-	    retval = tty_check_change(tty);
-	    if ( retval )
-		return(retval);
-	    tty_wait_until_sent(tty, 0);
-	    if ( !arg )
-		mxser_send_break(info, HZ/4);		/* 1/4 second */
-	    return(0);
-	case TCSBRKP:	/* support for POSIX tcsendbreak() */
-	    retval = tty_check_change(tty);
-	    if ( retval )
-		return(retval);
-	    tty_wait_until_sent(tty, 0);
-	    mxser_send_break(info, arg ? arg*(HZ/10) : HZ/4);
-	    return(0);
 	case TIOCGSOFTCAR:
 	    error = MX_ACCESS_CHK(VERIFY_WRITE, (void *)arg, sizeof(long));
 	    if ( MX_ERR(error) )
@@ -1836,21 +1849,13 @@ static int mxser_ioctl(struct tty_struct * tty, unsigned int cmd,
 				sizeof(struct serial_struct));
 	    if ( MX_ERR(error) )
 		return(error);
-#if (LINUX_VERSION_CODE >= VERSION_CODE(4,20,0)) || defined(RHEL8_PATCH1)
 	    return(mxser_get_serial_info(tty, (struct serial_struct *)arg));
-#else
-            return(mxser_get_serial_info(info, (struct serial_struct *)arg));
-#endif
 	case TIOCSSERIAL:
 	    error = MX_ACCESS_CHK(VERIFY_READ, (void *)arg,
 				sizeof(struct serial_struct));
 	    if ( MX_ERR(error) )
 		return(error);
-#if (LINUX_VERSION_CODE >= VERSION_CODE(4,20,0)) || defined(RHEL8_PATCH1)
 	    return(mxser_set_serial_info(tty, (struct serial_struct *)arg));
-#else
-	    return(mxser_set_serial_info(info, (struct serial_struct *)arg));
-#endif
 	case TIOCSERGETLSR: /* Get line status register */
 	    error = MX_ACCESS_CHK(VERIFY_WRITE, (void *)arg,
 				sizeof(unsigned int));
@@ -2258,7 +2263,7 @@ static void mxser_stoprx(struct tty_struct * tty)
 	            info->IER |= UART_IER_THRI;
 	            outb(info->IER, info->base + UART_IER);
 		}
-	    }
+	    }	
 #if !defined CONFIG_PREEMPT_RT_FULL
 	    MX_UNLOCK(&info->slock);
 #endif
@@ -2317,13 +2322,13 @@ static void mxser_startrx(struct tty_struct * tty)
 static void mxser_throttle(struct tty_struct * tty)
 {
 #if defined CONFIG_PREEMPT_RT_FULL
-	struct mxser_struct *info = (struct mxser_struct *)tty->driver_data;
-	MX_LOCK_INIT();
-	MX_LOCK(&info->slock);
-#endif	
+	//struct mxser_struct *info = (struct mxser_struct *)tty->driver_data;
+	//MX_LOCK_INIT();
+	//MX_LOCK(&info->slock);
+#endif
         mxser_stoprx(tty);
 #if defined CONFIG_PREEMPT_RT_FULL
-	MX_UNLOCK(&info->slock);
+	//MX_UNLOCK(&info->slock);
 #endif
 }
 
@@ -2377,7 +2382,11 @@ static void mxser_set_termios(struct tty_struct * tty,
 /* Handle sw stopped */
 	if ( (old_termios->c_iflag & IXON) &&
      	     !(tty->termios.c_iflag & IXON) ) {
+#if (LINUX_VERSION_CODE < VERSION_CODE(5,14,0))
     		tty->stopped = 0;
+#else
+		tty->flow.stopped = 0;
+#endif
 
 		// following add by Victor Yu. 09-02-2002
 		if ( info->IsMoxaMustChipFlag ) {
@@ -2806,9 +2815,14 @@ static void mxser_transmit_chars(struct mxser_struct *info)
 	    	//MX_UNLOCK(&info->slock);
 		return;
 	}
-
+#if (LINUX_VERSION_CODE < VERSION_CODE(5,14,0))
 	if (/*(info->xmit_cnt <= 0) ||*/ info->tty->stopped ||
 	    (info->tty->hw_stopped && (info->type != PORT_16550A) &&(!info->IsMoxaMustChipFlag))) {
+#else
+	if (/*(info->xmit_cnt <= 0) ||*/ info->tty->flow.stopped ||
+	    (info->tty->hw_stopped && (info->type != PORT_16550A) &&(!info->IsMoxaMustChipFlag))) {
+
+#endif
 		info->IER &= ~UART_IER_THRI;
 		outb(info->IER, info->base + UART_IER);
 	        //MX_UNLOCK(&info->slock);
@@ -2865,8 +2879,8 @@ static void mxser_check_modem_status(struct mxser_struct *info,
 	    if( tty ) {
 		ld = tty_ldisc_ref(tty);
 		if( ld )
-		    if ( ld->ops->dcd_change)
-			ld->ops->dcd_change(tty, ((status & UART_MSR_DCD)? TIOCM_CAR : 0));
+		    if( ld->ops->dcd_change )
+                        ld->ops->dcd_change(tty, ((status & UART_MSR_DCD)? TIOCM_CAR : 0));
 		tty_ldisc_deref(ld);
 	    }
 	    info->icount.dcd++;
@@ -3485,12 +3499,10 @@ static int mxser_set_baud(struct mxser_struct *info, long newspd)
  * friends of mxser_ioctl()
  * ------------------------------------------------------------
  */
-
-#if (LINUX_VERSION_CODE >= VERSION_CODE(4,20,0)) || defined(RHEL8_PATCH1)
 static int mxser_get_serial_info(struct tty_struct * tty,
 				 struct serial_struct * retinfo)
 {
-	struct mxser_struct	*info;
+	struct mxser_struct *info;
 
 	if ( !retinfo || !tty)
 	    return(-EFAULT);
@@ -3507,39 +3519,14 @@ static int mxser_get_serial_info(struct tty_struct * tty,
 	retinfo->closing_wait = info->closing_wait;
 	retinfo->custom_divisor = info->custom_divisor;
 	retinfo->hub6 = 0;
-
+	
 	return(0);
 }
-#else
-static int mxser_get_serial_info(struct mxser_struct * info,
-				 struct serial_struct * retinfo)
-{
-	struct serial_struct	tmp;
 
-	if ( !retinfo )
-	    return(-EFAULT);
-	memset(&tmp, 0, sizeof(tmp));
-	tmp.type = info->type;
-	tmp.line = info->port;
-	tmp.port = info->base;
-	tmp.irq = info->irq;
-	tmp.flags = info->flags;
-	tmp.baud_base = info->baud_base;
-	tmp.close_delay = info->close_delay;
-	tmp.closing_wait = info->closing_wait;
-	tmp.custom_divisor = info->custom_divisor;
-	tmp.hub6 = 0;
-	if(copy_to_user(retinfo, &tmp, sizeof(*retinfo)))
-	    return -EFAULT;
-	return(0);
-}
-#endif
-
-#if (LINUX_VERSION_CODE >= VERSION_CODE(4,20,0)) || defined(RHEL8_PATCH1)
 static int mxser_set_serial_info(struct tty_struct * tty,
 				 struct serial_struct * new_info)
 {
-	struct mxser_struct	*info;
+	struct mxser_struct *info;
 	unsigned int		flags;
 	int			retval = 0;
 
@@ -3547,7 +3534,7 @@ static int mxser_set_serial_info(struct tty_struct * tty,
 
 	if ( !new_info || !tty )
 	    return(-EFAULT);
-
+	
 	info = (struct mxser_struct *)tty->driver_data;
 
 	if ( (new_info->irq != info->irq) ||
@@ -3573,8 +3560,9 @@ static int mxser_set_serial_info(struct tty_struct * tty,
 			  (new_info->flags & ASYNC_FLAGS));
 	    info->close_delay = new_info->close_delay * HZ/100;
 	    info->closing_wait = new_info->closing_wait * HZ/100;
-	    //info->ttyPort.low_latency = (info->flags & ASYNC_LOW_LATENCY) ? 1 : 0;
+#if (LINUX_VERSION_CODE < VERSION_CODE(5,12,0))
 	    info->ttyPort.low_latency = 0;
+#endif
 	    if( (new_info->baud_base != info->baud_base) ||
 	    (new_info->custom_divisor != info->custom_divisor) )
 		info->custom_baud_rate = new_info->baud_base/new_info->custom_divisor;
@@ -3585,6 +3573,7 @@ static int mxser_set_serial_info(struct tty_struct * tty,
 
 	process_txrx_fifo(info);
 
+/* */
 	if ( info->flags & ASYNC_INITIALIZED ) {
 	    if ( flags != (info->flags & ASYNC_SPD_MASK) ){
 		MX_LOCK(&info->slock);
@@ -3596,68 +3585,33 @@ static int mxser_set_serial_info(struct tty_struct * tty,
 	}
 	return(retval);
 }
-#else
-static int mxser_set_serial_info(struct mxser_struct * info,
-				 struct serial_struct * new_info)
-{
-	struct serial_struct	new_serial;
-	unsigned int		flags;
-	int			retval = 0;
 
+static int mxser_get_icount(struct tty_struct *tty, struct serial_icounter_struct *icount)
+{
+ 	struct mxser_struct *info;
+	struct async_icount cnow;
+						      
 	MX_LOCK_INIT();
 
-	if ( !new_info || !info->base )
-	    return(-EFAULT);
-	if(copy_from_user(&new_serial, new_info, sizeof(new_serial)))
-	    return -EFAULT;
-
-	if ( (new_serial.irq != info->irq) ||
-	     (new_serial.port != info->base) )
-	    return(-EPERM);
-
-	flags = info->flags & ASYNC_SPD_MASK;
-
-       if ( !capable(CAP_SYS_ADMIN)) {
-	    if ( (new_serial.baud_base != info->baud_base) ||
-		 (new_serial.close_delay != info->close_delay) ||
-		 ((new_serial.flags & ~ASYNC_USR_MASK) !=
-		 (info->flags & ~ASYNC_USR_MASK)) )
-		return(-EPERM);
-	    info->flags = ((info->flags & ~ASYNC_USR_MASK) |
-			  (new_serial.flags & ASYNC_USR_MASK));
-	} else {
-	    /*
-	     * OK, past this point, all the error checking has been done.
-	     * At this point, we start making changes.....
-	     */
-	    info->flags = ((info->flags & ~ASYNC_FLAGS) |
-			  (new_serial.flags & ASYNC_FLAGS));
-	    info->close_delay = new_serial.close_delay * HZ/100;
-	    info->closing_wait = new_serial.closing_wait * HZ/100;
-	    //info->ttyPort.low_latency = (info->flags & ASYNC_LOW_LATENCY) ? 1 : 0;
-	    info->ttyPort.low_latency = 0;
-	    if( (new_serial.baud_base != info->baud_base) ||
-	    (new_serial.custom_divisor != info->custom_divisor) )
-		info->custom_baud_rate = new_serial.baud_base/new_serial.custom_divisor;
-      }
-
-/* added by casper, 3/17/2000, for mouse */
-	info->type = new_serial.type;
-
-	process_txrx_fifo(info);
-
-	if ( info->flags & ASYNC_INITIALIZED ) {
-	    if ( flags != (info->flags & ASYNC_SPD_MASK) ){
-		MX_LOCK(&info->slock);
-		mxser_change_speed(info,0);
-		MX_UNLOCK(&info->slock);
-	    }
-	} else{
-	    retval = mxser_startup(info);
-	}
-	return(retval);
+	info = (struct mxser_struct *)tty->driver_data;
+	
+	MX_LOCK(&info->slock);
+	cnow = info->icount;
+	MX_UNLOCK(&info->slock);
+	
+	icount->frame = cnow.frame;
+	icount->brk = cnow.brk;
+	icount->overrun = cnow.overrun;
+	icount->buf_overrun = cnow.buf_overrun;
+	icount->parity = cnow.parity;
+	icount->rx = cnow.rx;
+	icount->tx = cnow.tx;
+	icount->cts = cnow.cts;
+	icount->dsr = cnow.dsr;
+	icount->rng = cnow.rng;
+	icount->dcd = cnow.dcd;
+	return 0;
 }
-#endif
 
 /*
  * mxser_get_lsr_info - get line status register info
@@ -3686,6 +3640,7 @@ static int mxser_get_lsr_info(struct mxser_struct * info, unsigned int *value)
 /*
  * This routine sends a break character out the serial port.
  */
+/*
 static void mxser_send_break(struct mxser_struct * info, int duration)
 {
 	MX_LOCK_INIT();
@@ -3701,6 +3656,7 @@ static void mxser_send_break(struct mxser_struct * info, int duration)
 	outb(inb(info->base + UART_LCR) & ~UART_LCR_SBC, info->base + UART_LCR);
 	MX_UNLOCK(&info->slock);
 }
+*/
 
 static int mxser_tiocmget(struct tty_struct *tty)
 {

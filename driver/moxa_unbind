@@ -34,7 +34,7 @@ echo "$MOXA_DEVICE" | tr ' ' '\n' | while read i; do
 				if lsmod | grep -q $MOXA_DRIVER ; then
 					rmmod $MOXA_DRIVER
 				fi
-				modprobe $MOXA_DRIVER &> /dev/null
+				modprobe $MOXA_DRIVER
 			fi
 		done
 	fi

@@ -14,7 +14,7 @@ FILES =  mon_p.o mon_pa.o ../global.o\
 	../mxlib/mxlib.a ../mxwinlib/wlib.a
 endif
 
-all: msmon
+all:		msmon
 
 install: msmon
 	@cp -p msmon /usr/bin
@@ -23,18 +23,22 @@ msmon: 	$(FILES)
 ifeq ("$(LINUX_DIS)","Ubuntu") 
 ifeq ("$(shell test $(DISTRIBUTION_VERSION_MAJOR_NUMBER) -ge 17; echo $$?)","0")
 ifeq ("$(shell test $(DISTRIBUTION_VERSION_MINOR_NUMBER) -ge 04; echo $$?)","0")
-	@cc -no-pie -static $(FILES) -o msmon
+	@cc -static $(FILES) -o msmon
 else
-	@cc -no-pie $(FILES) -o msmon
-endif
-else
-	@cc -no-pie $(FILES) -o msmon
-endif
-else
-ifeq ("$(shell gcc -v 2>&1 | grep pie)", "")
 	@cc $(FILES) -o msmon
+endif
 else
-	@cc -no-pie $(FILES) -o msmon
+	@cc $(FILES) -o msmon
+endif
+else
+ifeq ("$(LINUX_DIS)","Debian")
+	@cc -static $(FILES) -o msmon
+else
+ifeq ("$(LINUX_DIS)","Kylin")
+	@cc -static $(FILES) -o msmon
+else
+	@cc $(FILES) -o msmon
+endif
 endif
 endif
 mon_p.o: 	mon_p.c ../global.h
