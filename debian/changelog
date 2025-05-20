@@ -1,3 +1,9 @@
+mxser (6.1-1) stable; urgency=medium
+
+  * Updated upstream driver to 6.1.
+
+ -- Gavin Lambert <debian@mirality.co.nz>  Tue, 20 May 2025 03:50:12 +0000
+
 mxser (5.2-1) stable; urgency=medium
 
   * Updated upstream driver to 5.2.

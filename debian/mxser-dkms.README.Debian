@@ -5,7 +5,7 @@ are provided as a dkms source package.  Installing it should automatically
 build and install the drivers into your current kernel, and optionally all
 others installed on your system.  (See the DKMS manpages for more info.)
 
-The readme.txt.gz and VERSION.txt.gz files are compressed copies of the
+The README.TXT.gz and VERSION.TXT.gz files are compressed copies of the
 vendor-supplied documentation, which have some more details about the
 driver and changelog.  The build instructions in those files don't apply
 to this packaged version, of course.

@@ -13,11 +13,11 @@ Subject: Add Makefile for dkms package.
 +KERNELRELEASE:=$(shell ls -r /lib/modules/ | head -n1)
 +KDIR:=/lib/modules/${KERNELRELEASE}/build
 +
-+MakeMod = -C ${KDIR} M=${CURDIR}/driver/kernel5.x
++MakeMod = -C ${KDIR} M=${CURDIR}/driver/kernel6.x
 +
 +all:
 +	${MAKE} LVER=${KERNELRELEASE} ${MakeMod} modules
 +
 +clean:
 +	${MAKE} LVER=${KERNELRELEASE} ${MakeMod} clean
-+	${MAKE} LVER=${KERNELRELEASE} -C driver/kernel5.x clean_local
++	${MAKE} LVER=${KERNELRELEASE} -C driver/kernel6.x clean_local
