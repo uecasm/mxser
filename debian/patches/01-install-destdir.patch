@@ -9,11 +9,9 @@ Subject: Support install into $DESTDIR.
  utility/term/Makefile | 4 ++--
  4 files changed, 8 insertions(+), 8 deletions(-)
 
-diff --git a/utility/conf/Makefile b/utility/conf/Makefile
-index a7b614f..c1e0bde 100644
 --- a/utility/conf/Makefile
 +++ b/utility/conf/Makefile
-@@ -5,7 +5,7 @@ FILES =  conftool.o ../global.o
+@@ -5,7 +5,7 @@
  all: muestty
  
  install: muestty
@@ -22,17 +20,15 @@ index a7b614f..c1e0bde 100644
  
  muestty: $(FILES)
  	@cc $(FILES) -o muestty
-@@ -21,4 +21,4 @@ clean:
+@@ -21,4 +21,4 @@
  	@rm -f muestty
  
  uninstall:
 -	@rm -f /usr/bin/muestty
 +	@rm -f $(DESTDIR)/usr/bin/muestty
-diff --git a/utility/diag/Makefile b/utility/diag/Makefile
-index f2f30c8..f6dd426 100644
 --- a/utility/diag/Makefile
 +++ b/utility/diag/Makefile
-@@ -4,7 +4,7 @@ FILES =  diag.o ../global.o
+@@ -4,7 +4,7 @@
  all:		msdiag
  
  install: msdiag
@@ -41,18 +37,16 @@ index f2f30c8..f6dd426 100644
  
  msdiag: 	$(FILES)
  	@cc $(FILES) -o msdiag
-@@ -20,4 +20,4 @@ clean:
+@@ -20,4 +20,4 @@
  	@rm -f msdiag
  
  uninstall:
 -	@rm -f /usr/bin/msdiag
 +	@rm -f $(DESTDIR)/usr/bin/msdiag
-diff --git a/utility/mon/Makefile b/utility/mon/Makefile
-index c0f38b3..873e0cd 100644
 --- a/utility/mon/Makefile
 +++ b/utility/mon/Makefile
-@@ -17,7 +17,7 @@ endif
- all: msmon
+@@ -17,7 +17,7 @@
+ all:		msmon
  
  install: msmon
 -	@cp -p msmon /usr/bin
@@ -60,18 +54,16 @@ index c0f38b3..873e0cd 100644
  
  msmon: 	$(FILES)
  ifeq ("$(LINUX_DIS)","Ubuntu") 
-@@ -52,4 +52,4 @@ clean:
+@@ -56,4 +56,4 @@
  	@rm -f msmon
  
  uninstall:
 -	@rm -f /usr/bin/msmon
 +	@rm -f $(DESTDIR)/usr/bin/msmon
-diff --git a/utility/term/Makefile b/utility/term/Makefile
-index cf33c2f..de33aee 100644
 --- a/utility/term/Makefile
 +++ b/utility/term/Makefile
-@@ -18,7 +18,7 @@ endif
- all: msterm
+@@ -18,7 +18,7 @@
+ all:		msterm
  
  install: msterm
 -	@cp -p msterm /usr/bin
@@ -79,7 +71,7 @@ index cf33c2f..de33aee 100644
  
  msterm:	$(FILES)
  ifeq ("$(LINUX_DIS)","Ubuntu")
-@@ -65,4 +65,4 @@ clean:
+@@ -69,4 +69,4 @@
  	@rm -f msterm
  
  uninstall:

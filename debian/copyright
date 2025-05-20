@@ -3,11 +3,11 @@ Upstream-Name: mxser
 Source: http://www.moxa.com/support/download.aspx?type=support&id=1122
 
 Files:     *
-Copyright: 2009-2014 Moxa Inc. <support@moxa.com>
+Copyright: 2009-2023 Moxa Inc. <support@moxa.com>
 License:   GPL-2.0+
 
 Files:     debian/*
-Copyright: 2017 Gavin Lambert <uecasm@users.noreply.github.com>
+Copyright: 2017-2025 Gavin Lambert <uecasm@users.noreply.github.com>
 License:   GPL-2.0+
 
 License:   GPL-2.0+

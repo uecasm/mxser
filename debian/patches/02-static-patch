@@ -9,11 +9,9 @@ Subject: Ensure tools are linked statically.
  utility/term/Makefile | 10 +++++-----
  4 files changed, 12 insertions(+), 12 deletions(-)
 
-diff --git a/utility/conf/Makefile b/utility/conf/Makefile
-index c1e0bde..2337ced 100644
 --- a/utility/conf/Makefile
 +++ b/utility/conf/Makefile
-@@ -8,7 +8,7 @@ install: muestty
+@@ -8,7 +8,7 @@
  	@install muestty $(DESTDIR)/usr/bin/
  
  muestty: $(FILES)
@@ -22,11 +20,9 @@ index c1e0bde..2337ced 100644
  
  conftool.o: 	conftool.c ../global.h 
  	@$(CC)	conftool.c $(HDR_DIR)
-diff --git a/utility/diag/Makefile b/utility/diag/Makefile
-index f6dd426..af9ac20 100644
 --- a/utility/diag/Makefile
 +++ b/utility/diag/Makefile
-@@ -7,7 +7,7 @@ install: msdiag
+@@ -7,7 +7,7 @@
  	@install msdiag $(DESTDIR)/usr/bin/
  
  msdiag: 	$(FILES)
@@ -35,59 +31,51 @@ index f6dd426..af9ac20 100644
  
  diag.o: 	diag.c ../global.h
  	@$(CC)	diag.c
-diff --git a/utility/mon/Makefile b/utility/mon/Makefile
-index 873e0cd..96f64c1 100644
 --- a/utility/mon/Makefile
 +++ b/utility/mon/Makefile
-@@ -23,18 +23,18 @@ msmon: 	$(FILES)
- ifeq ("$(LINUX_DIS)","Ubuntu") 
- ifeq ("$(shell test $(DISTRIBUTION_VERSION_MAJOR_NUMBER) -ge 17; echo $$?)","0")
+@@ -25,10 +25,10 @@
  ifeq ("$(shell test $(DISTRIBUTION_VERSION_MINOR_NUMBER) -ge 04; echo $$?)","0")
--	@cc -no-pie -static $(FILES) -o msmon
-+	@cc -static -no-pie $(FILES) -o msmon
+ 	@cc -static $(FILES) -o msmon
  else
--	@cc -no-pie $(FILES) -o msmon
-+	@cc -static -no-pie $(FILES) -o msmon
- endif
- else
--	@cc -no-pie $(FILES) -o msmon
-+	@cc -static -no-pie $(FILES) -o msmon
- endif
- else
- ifeq ("$(shell gcc -v 2>&1 | grep pie)", "")
 -	@cc $(FILES) -o msmon
 +	@cc -static $(FILES) -o msmon
+ endif
  else
--	@cc -no-pie $(FILES) -o msmon
-+	@cc -static -no-pie $(FILES) -o msmon
+-	@cc $(FILES) -o msmon
++	@cc -static $(FILES) -o msmon
+ endif
+ else
+ ifeq ("$(LINUX_DIS)","Debian")
+@@ -37,7 +37,7 @@
+ ifeq ("$(LINUX_DIS)","Kylin")
+ 	@cc -static $(FILES) -o msmon
+ else
+-	@cc $(FILES) -o msmon
++	@cc -static $(FILES) -o msmon
  endif
  endif
- mon_p.o: 	mon_p.c ../global.h
-diff --git a/utility/term/Makefile b/utility/term/Makefile
-index de33aee..6715137 100644
+ endif
 --- a/utility/term/Makefile
 +++ b/utility/term/Makefile
-@@ -24,18 +24,18 @@ msterm:	$(FILES)
- ifeq ("$(LINUX_DIS)","Ubuntu")
- ifeq ("$(shell test $(DISTRIBUTION_VERSION_MAJOR_NUMBER) -ge 17; echo $$?)","0")
+@@ -26,10 +26,10 @@
  ifeq ("$(shell test $(DISTRIBUTION_VERSION_MINOR_NUMBER) -ge 04; echo $$?)","0")
--	@cc -no-pie -static $(FILES) -o msterm
-+	@cc -static -no-pie $(FILES) -o msterm
+ 	@cc -static $(FILES) -o msterm
  else
--	@cc -no-pie $(FILES) -o msterm
-+	@cc -static -no-pie $(FILES) -o msterm
- endif
- else
--	@cc -no-pie $(FILES) -o msterm
-+	@cc -static -no-pie $(FILES) -o msterm
- endif
- else
- ifeq ("$(shell gcc -v 2>&1 | grep pie)", "")
 -	@cc $(FILES) -o msterm
 +	@cc -static $(FILES) -o msterm
+ endif
  else
--	@cc -no-pie $(FILES) -o msterm
-+	@cc -static -no-pie $(FILES) -o msterm
+-	@cc $(FILES) -o msterm
++	@cc -static $(FILES) -o msterm
+ endif
+ else
+ ifeq ("$(LINUX_DIS)","Debian")
+@@ -38,7 +38,7 @@
+ ifeq ("$(LINUX_DIS)","Kylin")
+ 	@cc -static $(FILES) -o msterm
+ else
+-	@cc $(FILES) -o msterm
++	@cc -static $(FILES) -o msterm
  endif
  endif
- term.o: 	term.c term.h
+ endif

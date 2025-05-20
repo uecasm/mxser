@@ -7,20 +7,17 @@ Subject: Add Makefile for dkms package.
  1 file changed, 11 insertions(+)
  create mode 100644 dkms/Makefile
 
-diff --git a/dkms/Makefile b/dkms/Makefile
-new file mode 100644
-index 0000000..06ce8a4
 --- /dev/null
 +++ b/dkms/Makefile
 @@ -0,0 +1,11 @@
 +KERNELRELEASE:=$(shell ls -r /lib/modules/ | head -n1)
 +KDIR:=/lib/modules/${KERNELRELEASE}/build
 +
-+MakeMod = -C ${KDIR} M=${CURDIR}/driver/kernel4.x
++MakeMod = -C ${KDIR} M=${CURDIR}/driver/kernel5.x
 +
 +all:
 +	${MAKE} LVER=${KERNELRELEASE} ${MakeMod} modules
 +
 +clean:
 +	${MAKE} LVER=${KERNELRELEASE} ${MakeMod} clean
-+	${MAKE} LVER=${KERNELRELEASE} -C driver/kernel4.x clean_local
++	${MAKE} LVER=${KERNELRELEASE} -C driver/kernel5.x clean_local
