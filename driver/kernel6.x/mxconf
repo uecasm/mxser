@@ -18,10 +18,10 @@
 
 #Parameters
 MX_MSB_VERSION=`awk '{if($2=="MX_SER_VERSION"){print $3}}' ../../mx_ver.h | sed s/\"//g`
-MX_RELEASE=5.18.11
-MX_VERSION=5
-MX_PATCH_LEVEL=18
-MX_SUBLEVEL=11
+MX_RELEASE=6.8.0
+MX_VERSION=6
+MX_PATCH_LEVEL=8
+MX_SUBLEVEL=0
 MX_RELEASE_DATE=`awk '{if($2=="MX_SER_DATE"){print $3}}' ../../mx_ver.h | sed s/\"//g`
 MX_VERSION_CODE=$(( ($MX_VERSION<<16)+($MX_PATCH_LEVEL<<8)+$MX_SUBLEVEL ))
 

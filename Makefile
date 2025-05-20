@@ -1,18 +1,19 @@
-PWD:=$(shell pwd)
-MX_VER_TXT:=$(PWD)/VERSION.txt
-MX_VER_MK:=$(PWD)/ver.mk
-MX_VER_H:=$(PWD)/mx_ver.h
-MX_BUILD_VER:=$(shell awk '{if($$1=="Version" && $$2=="Number:"){print $$3}}' $(MX_VER_TXT))
-MX_BUILD_DATE:=$(shell awk '{if($$1=="Date:"){print $$2}}' $(MX_VER_TXT))
-MX_CURR_DATE:=$(shell date +%g%m%d%H)
+PWD				:= $(shell pwd)
+MX_VER_TXT		:= $(PWD)/VERSION.TXT
+MX_VER_MK		:= $(PWD)/ver.mk
+MX_VER_H		:= $(PWD)/mx_ver.h
+MX_BUILD_VER	:= $(shell awk '{if($$1=="Version" && $$2=="Number:"){print $$3}}' $(MX_VER_TXT))
+MX_BUILD_DATE	:= $(shell awk '{if($$1=="Date:"){print $$2}}' $(MX_VER_TXT))
+MX_CURR_DATE	:= $(shell date +%g%m%d%H)
 
 KERNEL_VERSION_MAJOR_NUMBER:=$(shell uname -r | cut -f1 -d.)
 KERNEL_VERSION_MINOR_NUMBER:=$(shell uname -r | cut -f2 -d.)
 
-DRIVER_PATH:=driver/kernel5.x
+DRIVER_PATH:=driver/kernel6.x
 
 all: check_version mxser
 install: check_version clean driver_install
+install_k6p1: check_version clean driver_install_kernel6_sp1
 
 clean: check_version driver_clean 
 
@@ -20,9 +21,9 @@ remove: check_version uninstall
 uninstall: check_version driver_uninstall
 
 check_version:
-ifneq ("$(KERNEL_VERSION_MAJOR_NUMBER)","5")
+ifneq ("$(KERNEL_VERSION_MAJOR_NUMBER)","6")
 	@echo "Error: Your kernel version is $(KERNEL_VERSION_MAJOR_NUMBER).x."
-	@echo "       This driver only support linux kernel 5.x."
+	@echo "       This driver only support linux kernel 6.x."
 	@exit 1;
 endif
 
@@ -41,13 +42,9 @@ driver_install:
 	@cd ${DRIVER_PATH};\
 	make install -s 
 
-driver_installsp1:
+driver_install_k6p1:
 	@cd ${DRIVER_PATH};\
-	make installsp1 -s
-	
-driver_installsp2:
-	@cd ${DRIVER_PATH};\
-	make installsp2 -s
+	make k6p1 -s
 	
 utility_install:
 	@cd utility;\
@@ -95,7 +92,8 @@ endif
 	@echo "New $(MX_VER_H) is created."
 	@rm -f $(MX_VER_MK)
 	rm -rfi ../disk/*
-	cp -f VERSION.txt ../disk
+	cp -f VERSION.TXT ../disk
+	cp -f README.TXT ../disk
 	cp -rf ../source ../mxser
 	tar -cvzf ../disk/driv_linux_smart_v$(MX_BUILD_VER)_build_$(MX_CURR_DATE).tgz ../mxser
 	@rm -rf ../mxser

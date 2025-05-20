@@ -31,6 +31,29 @@ endif
 	@echo " installed successfully."
 	@echo "**********************************************************************"
 
+k6p1: module_k6p1
+	@mkdir -p /lib/modules/$(LVER)/kernel/drivers/char/
+	$(shell [ -e $(MOD_DIR)/mxser.ko.gz ] && mv $(MOD_DIR)/mxser.ko.gz $(MOD_DIR)/mxser.ko.gz.bk)
+	@cp -f ./$(TARGET_DRIVER1).ko /lib/modules/$(LVER)/kernel/drivers/char/
+	@cp -f ./$(TARGET_DRIVER2).ko /lib/modules/$(LVER)/kernel/drivers/char/
+	@mkdir -p /lib/modules/$(LVER)/misc/
+	@cp -f ./$(TARGET_DRIVER1).ko /lib/modules/$(LVER)/misc/
+	@cp -f ./$(TARGET_DRIVER2).ko /lib/modules/$(LVER)/misc/
+ifeq ($(KER_DVR1_DIR), $(wildcard $(KER_DVR1_DIR)))
+	@mv /lib/modules/$(LVER)/kernel/drivers/tty/$(TARGET_DRIVER1).ko /lib/modules/$(LVER)/kernel/drivers/tty/$(TARGET_DRIVER1).bak
+	@depmod -a
+	@mv /lib/modules/$(LVER)/kernel/drivers/tty/$(TARGET_DRIVER1).bak /lib/modules/$(LVER)/kernel/drivers/tty/$(TARGET_DRIVER1).ko
+else
+	@depmod -a
+endif
+	@echo " "
+	@echo "**********************************************************************"
+	@echo -n " MOXA Smartio/Industio Family Multiport Board Driver "
+	@echo $(MXVER)
+	@echo " installed successfully."
+	@echo "**********************************************************************"
+
+
 ifneq ($(KERNELRELEASE),)
 obj-m := $(TARGET_DRIVER1).o $(TARGET_DRIVER2).o 
 $(TARGET_DRIVER2)-objs := mxpcie.o ${CPLD_PATH}/cpld.o ${CPLD_PATH}/gpio.o
@@ -40,6 +63,15 @@ PWD	:= $(shell pwd)
 
 module: envchk
 	@$(MAKE) -s -C $(KDIR) M=$(PWD) modules 2>> build.log \
+	&& cp -f ./build.log ../../build.log \
+	&& exit 0 \
+	|| echo "Build Fail! Please check build.log for further information" \
+	&& echo "and send it to support@moxa.com." \
+	&& cp -f ./build.log ../../build.log \
+	&& exit 1
+
+module_k6p1: envchk
+	@$(MAKE) EXTRA_CFLAGS+=" -DOS_LINUX -DKERNEL6_PATCH1" -s -C $(KDIR) M=$(PWD) modules 2>> build.log \
 	&& cp -f ./build.log ../../build.log \
 	&& exit 0 \
 	|| echo "Build Fail! Please check build.log for further information" \
